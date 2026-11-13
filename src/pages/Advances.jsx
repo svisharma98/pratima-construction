@@ -4,22 +4,26 @@ import {
   IconButton, MenuItem, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField,
   Tooltip, Typography
 } from '@mui/material';
-import { AddOutlined, AccountBalanceWalletOutlined, EditOutlined } from '@mui/icons-material';
+import { AddOutlined, AccountBalanceWalletOutlined, ChevronLeftOutlined, ChevronRightOutlined, EditOutlined } from '@mui/icons-material';
 import ScreenHeader from '../components/ScreenHeader.jsx';
 import { paiseFromRupees, prettyDate, rupees, today } from '../lib/format.js';
 
 const initialForm = { employee_id: '', payment_date: today(), amount: '', method: 'Cash', reference_number: '', remarks: '' };
-const initialAdjustment = { direction: 'Reduce outstanding', amount: '', reason: '' };
+const shiftMonth = (value, offset) => {
+  const [year, month] = value.split('-').map(Number);
+  const date = new Date(year, month - 1 + offset, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+};
+
 export default function Advances({ notify }) {
   const [employees, setEmployees] = React.useState([]);
   const [advances, setAdvances] = React.useState([]);
   const [adjustments, setAdjustments] = React.useState([]);
+  const [month, setMonth] = React.useState(today().slice(0, 7));
+  const [selectedWeek, setSelectedWeek] = React.useState('all');
   const [open, setOpen] = React.useState(false);
   const [form, setForm] = React.useState(initialForm);
   const [editingAdvanceId, setEditingAdvanceId] = React.useState(null);
-  const [adjustmentAdvance, setAdjustmentAdvance] = React.useState(null);
-  const [adjustment, setAdjustment] = React.useState(initialAdjustment);
-  const [savingAdjustment, setSavingAdjustment] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const load = React.useCallback(async () => {
     try {
@@ -35,9 +39,22 @@ export default function Advances({ notify }) {
   }, [notify]);
   React.useEffect(() => { load(); }, [load]);
   const setField = (field) => (event) => setForm((value) => ({ ...value, [field]: event.target.value }));
-  const setAdjustmentField = (field) => (event) => setAdjustment((value) => ({ ...value, [field]: event.target.value }));
+  const [year, monthNumber] = month.split('-').map(Number);
+  const daysInMonth = new Date(year, monthNumber, 0).getDate();
+  const weekStart = selectedWeek === 'all' ? 1 : (Number(selectedWeek) - 1) * 7 + 1;
+  const weekEnd = selectedWeek === 'all' ? daysInMonth : Math.min(weekStart + 6, daysInMonth);
+  const periodStart = `${month}-${String(weekStart).padStart(2, '0')}`;
+  const periodEnd = `${month}-${String(weekEnd).padStart(2, '0')}`;
+  const periodAdvances = advances.filter((item) => item.payment_date >= periodStart && item.payment_date <= periodEnd);
+  const periodAdjustments = adjustments.filter((item) => {
+    const adjustmentDate = item.adjustment_date.slice(0, 10);
+    return adjustmentDate >= periodStart && adjustmentDate <= periodEnd;
+  });
   const outstanding = advances.reduce((sum, item) => sum + item.outstanding_paise, 0);
-  const total = advances.reduce((sum, item) => sum + item.amount_paise, 0);
+  const total = periodAdvances.reduce((sum, item) => sum + item.amount_paise, 0);
+  const currentMonth = today().slice(0, 7);
+  const monthLabel = new Intl.DateTimeFormat('en-IN', { month: 'long', year: 'numeric' })
+    .format(new Date(`${month}-01T00:00:00`));
   const duplicatePayment = advances.some((item) => item.employee_id === Number(form.employee_id)
     && item.payment_date === form.payment_date && item.id !== editingAdvanceId);
   const openNew = () => {
@@ -84,22 +101,6 @@ export default function Advances({ notify }) {
     } catch (error) { notify(error.message, 'error'); }
     finally { setSaving(false); }
   };
-  const submitAdjustment = async () => {
-    setSavingAdjustment(true);
-    try {
-      await window.payroll.advances.adjust({
-        advance_payment_id: adjustmentAdvance.id,
-        direction: adjustment.direction,
-        amount_paise: paiseFromRupees(adjustment.amount),
-        reason: adjustment.reason
-      });
-      notify('Weekly payment balance corrected');
-      setAdjustmentAdvance(null);
-      setAdjustment(initialAdjustment);
-      load();
-    } catch (error) { notify(error.message, 'error'); }
-    finally { setSavingAdjustment(false); }
-  };
   return <>
     <ScreenHeader title="Weekly payments" subtitle="Record money already paid to each labourer. It will be deducted automatically when you make a labour bill." actionLabel="Record weekly payment" onAction={openNew} icon={AddOutlined} />
     <Grid container spacing={2} sx={{ mb: 3 }}>
@@ -107,13 +108,28 @@ export default function Advances({ notify }) {
         <Stack direction="row" justifyContent="space-between"><Box><Typography variant="body2" color="text.secondary">Payments waiting to be deducted</Typography><Typography variant="h5" sx={{ mt: 1 }}>{rupees(outstanding)}</Typography></Box>
           <AccountBalanceWalletOutlined color="primary" /></Stack></CardContent></Card></Grid>
       <Grid item xs={12} sm={6}><Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}><CardContent>
-        <Stack direction="row" justifyContent="space-between"><Box><Typography variant="body2" color="text.secondary">Total weekly payments recorded</Typography><Typography variant="h5" sx={{ mt: 1 }}>{rupees(total)}</Typography></Box>
+        <Stack direction="row" justifyContent="space-between"><Box><Typography variant="body2" color="text.secondary">Payments recorded in selected period</Typography><Typography variant="h5" sx={{ mt: 1 }}>{rupees(total)}</Typography></Box>
           <AccountBalanceWalletOutlined color="secondary" /></Stack></CardContent></Card></Grid>
     </Grid>
     <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
-      <Box sx={{ p: 2 }}><Typography fontWeight={700}>Weekly payments</Typography></Box>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }} justifyContent="space-between" sx={{ p: 2 }}>
+        <Box><Typography fontWeight={700}>Weekly payments</Typography><Typography variant="caption" color="text.secondary">{periodStart === periodEnd ? prettyDate(periodStart) : `${prettyDate(periodStart)} – ${prettyDate(periodEnd)}`}</Typography></Box>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Tooltip title="Previous month"><span><IconButton size="small" aria-label="Previous month" onClick={() => { setMonth((value) => shiftMonth(value, -1)); setSelectedWeek('all'); }}><ChevronLeftOutlined /></IconButton></span></Tooltip>
+          <Typography variant="body2" fontWeight={650} sx={{ minWidth: 120, textAlign: 'center' }}>{monthLabel}</Typography>
+          <Tooltip title="Next month"><span><IconButton size="small" aria-label="Next month" disabled={month >= currentMonth} onClick={() => { setMonth((value) => shiftMonth(value, 1)); setSelectedWeek('all'); }}><ChevronRightOutlined /></IconButton></span></Tooltip>
+          <TextField size="small" select label="Week" value={selectedWeek} onChange={(event) => setSelectedWeek(event.target.value)} sx={{ minWidth: 130 }}>
+            <MenuItem value="all">All weeks</MenuItem>
+            {Array.from({ length: Math.ceil(daysInMonth / 7) }, (_value, index) => {
+              const start = index * 7 + 1;
+              const end = Math.min(start + 6, daysInMonth);
+              return <MenuItem key={index + 1} value={String(index + 1)}>Week {index + 1} ({start}–{end})</MenuItem>;
+            })}
+          </TextField>
+        </Stack>
+      </Stack>
       <Box className="page-table-wrap"><Table><TableHead><TableRow><TableCell>Labourer</TableCell><TableCell>Date paid</TableCell><TableCell align="right">Amount paid</TableCell><TableCell align="right">Not yet deducted</TableCell><TableCell align="right">Action</TableCell></TableRow></TableHead>
-        <TableBody>{advances.map((item) => <TableRow key={item.id}>
+        <TableBody>{periodAdvances.map((item) => <TableRow key={item.id}>
           <TableCell>{item.full_name}<Typography variant="caption" display="block" color="text.secondary">{item.employee_code}</Typography></TableCell>
           <TableCell>{prettyDate(item.payment_date)}</TableCell>
           <TableCell align="right">{rupees(item.amount_paise)}</TableCell>
@@ -122,25 +138,22 @@ export default function Advances({ notify }) {
             <Tooltip title="Edit payment details"><IconButton size="small" aria-label={`Edit payment for ${item.full_name}`} onClick={() => openEdit(item)}>
               <EditOutlined fontSize="small" />
             </IconButton></Tooltip>
-            <Button size="small" onClick={() => {
-            setAdjustmentAdvance(item);
-            setAdjustment(initialAdjustment);
-          }}>Fix balance</Button></TableCell>
+          </TableCell>
         </TableRow>)}
-          {!advances.length && <TableRow><TableCell colSpan={5}><Typography color="text.secondary" textAlign="center" sx={{ py: 5 }}>No weekly payments recorded. Select “Record weekly payment” when you pay a labourer.</Typography></TableCell></TableRow>}
+          {!periodAdvances.length && <TableRow><TableCell colSpan={5}><Typography color="text.secondary" textAlign="center" sx={{ py: 5 }}>{advances.length ? 'No weekly payments recorded for this period.' : 'No weekly payments recorded. Select “Record weekly payment” when you pay a labourer.'}</Typography></TableCell></TableRow>}
         </TableBody>
       </Table></Box>
     </Paper>
     <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', overflow: 'hidden', mt: 3 }}>
-      <Box sx={{ p: 2 }}><Typography fontWeight={700}>Payments deducted from bills</Typography></Box>
+      <Box sx={{ p: 2 }}><Typography fontWeight={700}>Payments deducted from bills</Typography><Typography variant="caption" color="text.secondary">Filtered to the selected period</Typography></Box>
       <Box className="page-table-wrap"><Table size="small"><TableHead><TableRow><TableCell>Transaction</TableCell><TableCell>Employee</TableCell><TableCell>Date</TableCell><TableCell>Type</TableCell><TableCell>Direction</TableCell><TableCell align="right">Amount</TableCell><TableCell>Reason</TableCell></TableRow></TableHead>
-        <TableBody>{adjustments.map((item) => <TableRow key={item.transaction_id}>
+        <TableBody>{periodAdjustments.map((item) => <TableRow key={item.transaction_id}>
           <TableCell>{item.transaction_id}</TableCell><TableCell>{item.full_name}</TableCell>
           <TableCell>{new Date(`${item.adjustment_date.replace(' ', 'T')}Z`).toLocaleDateString('en-IN')}</TableCell>
           <TableCell>{item.type}</TableCell><TableCell>{item.direction}</TableCell>
           <TableCell align="right">{rupees(item.amount_paise)}</TableCell><TableCell>{item.reason}</TableCell>
         </TableRow>)}
-          {!adjustments.length && <TableRow><TableCell colSpan={7}><Typography color="text.secondary" textAlign="center" sx={{ py: 4 }}>After a labour bill is made, the amount deducted appears here.</Typography></TableCell></TableRow>}
+          {!periodAdjustments.length && <TableRow><TableCell colSpan={7}><Typography color="text.secondary" textAlign="center" sx={{ py: 4 }}>{adjustments.length ? 'No deductions or adjustments recorded for this period.' : 'After a labour bill is made, the amount deducted appears here.'}</Typography></TableCell></TableRow>}
         </TableBody>
       </Table></Box>
     </Paper>
@@ -168,19 +181,6 @@ export default function Advances({ notify }) {
         <Button variant="contained" disabled={saving || duplicatePayment || !form.employee_id || !form.amount || Number(form.amount) <= 0} onClick={submit}>
           {saving ? 'Saving…' : editingAdvanceId ? 'Update weekly payment' : 'Save weekly payment'}
         </Button></DialogActions>
-    </Dialog>
-    <Dialog open={Boolean(adjustmentAdvance)} onClose={() => setAdjustmentAdvance(null)} maxWidth="sm" fullWidth>
-      <DialogTitle>Correct weekly payment</DialogTitle>
-      <DialogContent dividers><Stack spacing={2} sx={{ pt: 1 }}>
-        <Typography variant="body2" color="text.secondary">{adjustmentAdvance?.full_name} · Current outstanding {rupees(adjustmentAdvance?.outstanding_paise || 0)}</Typography>
-        <TextField select label="Adjustment" value={adjustment.direction} onChange={setAdjustmentField('direction')}>
-          <MenuItem value="Reduce outstanding">Reduce outstanding</MenuItem><MenuItem value="Reinstate outstanding">Reinstate previously reduced amount</MenuItem>
-        </TextField>
-        <TextField required label="Amount (₹)" type="number" inputProps={{ min: 0.01, step: '0.01' }} value={adjustment.amount} onChange={setAdjustmentField('amount')} />
-        <TextField required label="Reason" multiline minRows={2} value={adjustment.reason} onChange={setAdjustmentField('reason')} helperText="This adjustment is permanently added to the transaction history." />
-      </Stack></DialogContent>
-      <DialogActions sx={{ px: 3, py: 2 }}><Button onClick={() => setAdjustmentAdvance(null)}>Cancel</Button>
-        <Button variant="contained" disabled={savingAdjustment || !adjustment.amount || Number(adjustment.amount) <= 0 || adjustment.reason.trim().length < 5} onClick={submitAdjustment}>{savingAdjustment ? 'Saving…' : 'Save adjustment'}</Button></DialogActions>
     </Dialog>
   </>;
 }
