@@ -183,12 +183,47 @@ test('SQLite IPC workflows create employees, attendance, advances and immutable 
       amount_paise: 50_000,
       method: 'UPI'
     });
+    const advance = (await invoke('advances:list', { employee_id: employee.id }))[0];
     assert.throws(() => invoke('advances:create', {
       employee_id: employee.id,
       payment_date: '2026-01-02',
       amount_paise: 25_000,
       method: 'Cash'
     }), /already recorded for this labourer on this date/);
+    await invoke('advances:create', {
+      employee_id: legacyEmployee.id,
+      payment_date: '2026-01-02',
+      amount_paise: 10_000,
+      method: 'Cash'
+    });
+    await invoke('advances:create', {
+      employee_id: employee.id,
+      payment_date: '2026-02-02',
+      amount_paise: 15_000,
+      method: 'Cash'
+    });
+    assert.throws(() => invoke('advances:update', {
+      id: advance.id,
+      payment_date: '2026-02-02',
+      amount_paise: 60_000,
+      method: 'Cash'
+    }), /already recorded for this labourer on this date/);
+    await invoke('advances:update', {
+      id: advance.id,
+      payment_date: '2026-01-03',
+      amount_paise: 60_000,
+      method: 'Cash',
+      reference_number: 'REF-EDIT',
+      remarks: 'Corrected weekly payment'
+    });
+    const updatedAdvance = (await invoke('advances:list', { employee_id: employee.id }))
+      .find((item) => item.id === advance.id);
+    assert.equal(updatedAdvance.payment_date, '2026-01-03');
+    assert.equal(updatedAdvance.amount_paise, 60_000);
+    assert.equal(updatedAdvance.outstanding_paise, 60_000);
+    assert.equal(updatedAdvance.method, 'Cash');
+    assert.equal(updatedAdvance.reference_number, 'REF-EDIT');
+    assert.equal(updatedAdvance.remarks, 'Corrected weekly payment');
     const salary = await invoke('salaries:process', {
       employee_id: employee.id,
       period_start: '2026-01-01',
@@ -200,10 +235,17 @@ test('SQLite IPC workflows create employees, attendance, advances and immutable 
     assert.equal(salary.gross_paise, 250_000);
     assert.equal(JSON.parse(salary.attendance_snapshot).attendanceHours, 25);
     assert.equal(JSON.parse(salary.attendance_snapshot).earnedPaise, 250_000);
-    assert.equal(salary.advance_adjustment_paise, 50_000);
-    assert.equal(salary.net_paise, 200_000);
+    assert.equal(salary.advance_adjustment_paise, 60_000);
+    assert.equal(salary.net_paise, 190_000);
     assert.equal(salary.paid_paise, 0);
-    assert.equal((await invoke('advances:list', {}))[0].outstanding_paise, 0);
+    assert.equal((await invoke('advances:list', { employee_id: employee.id }))
+      .find((item) => item.id === advance.id).outstanding_paise, 0);
+    assert.throws(() => invoke('advances:update', {
+      id: advance.id,
+      payment_date: '2026-01-03',
+      amount_paise: 50_000,
+      method: 'Cash'
+    }), /cannot be reduced below what has already been deducted or adjusted/);
     assert.throws(() => invoke('salaries:process', {
       employee_id: employee.id,
       period_start: '2026-01-01',

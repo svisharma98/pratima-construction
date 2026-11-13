@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('payroll', Object.freeze({
   advances: Object.freeze({
     list: invoke('advances:list'),
     create: invoke('advances:create'),
+    update: invoke('advances:update'),
     adjust: invoke('advances:adjust'),
     history: invoke('advances:history')
   }),

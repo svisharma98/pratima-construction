@@ -448,6 +448,40 @@ function registerHandlers() {
     });
     return transact();
   });
+  ipcMain.handle('advances:update', (_event, input) => {
+    const data = z.object({
+      id: positiveInt,
+      payment_date: dateSchema,
+      amount_paise: positiveInt,
+      method: paymentMethod,
+      reference_number: z.string().max(100).optional().default(''),
+      remarks: z.string().max(300).optional().default('')
+    }).parse(input);
+    const update = db.transaction(() => {
+      const advance = db.prepare('SELECT * FROM advance_payments WHERE id=?').get(data.id);
+      if (!advance) throw new Error('Weekly payment not found');
+      const duplicate = db.prepare(`SELECT 1 FROM advance_payments
+        WHERE employee_id=? AND payment_date=? AND id<>? LIMIT 1`)
+        .get(advance.employee_id, data.payment_date, advance.id);
+      if (duplicate) {
+        throw new Error('A weekly payment is already recorded for this labourer on this date');
+      }
+      const salaryAdjusted = db.prepare(`SELECT COALESCE(SUM(amount_paise),0) AS amount
+        FROM salary_adjustments WHERE advance_payment_id=?`).get(advance.id).amount;
+      const outstanding = advance.outstanding_paise + data.amount_paise - advance.amount_paise;
+      if (outstanding < 0 || outstanding > data.amount_paise - salaryAdjusted) {
+        throw new Error('Amount cannot be reduced below what has already been deducted or adjusted');
+      }
+      db.prepare(`UPDATE advance_payments SET payment_date=?,amount_paise=?,outstanding_paise=?,
+        method=?,reference_number=?,remarks=? WHERE id=?`)
+        .run(data.payment_date, data.amount_paise, outstanding, data.method,
+          data.reference_number, data.remarks, advance.id);
+      logActivity('Weekly payment updated', 'Advance', advance.id,
+        `${data.payment_date} · ${data.amount_paise} paise`);
+      return true;
+    });
+    return update();
+  });
   ipcMain.handle('advances:adjust', (_event, input) => {
     const data = z.object({
       advance_payment_id: positiveInt,

@@ -1,7 +1,8 @@
 import React from 'react';
 import {
   Alert, Box, Button, Card, CardContent, Dialog, DialogActions, DialogContent, DialogTitle, Grid,
-  MenuItem, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography
+  IconButton, MenuItem, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField,
+  Tooltip, Typography
 } from '@mui/material';
 import { AddOutlined, AccountBalanceWalletOutlined, EditOutlined } from '@mui/icons-material';
 import ScreenHeader from '../components/ScreenHeader.jsx';
@@ -15,6 +16,7 @@ export default function Advances({ notify }) {
   const [adjustments, setAdjustments] = React.useState([]);
   const [open, setOpen] = React.useState(false);
   const [form, setForm] = React.useState(initialForm);
+  const [editingAdvanceId, setEditingAdvanceId] = React.useState(null);
   const [adjustmentAdvance, setAdjustmentAdvance] = React.useState(null);
   const [adjustment, setAdjustment] = React.useState(initialAdjustment);
   const [savingAdjustment, setSavingAdjustment] = React.useState(false);
@@ -37,7 +39,29 @@ export default function Advances({ notify }) {
   const outstanding = advances.reduce((sum, item) => sum + item.outstanding_paise, 0);
   const total = advances.reduce((sum, item) => sum + item.amount_paise, 0);
   const duplicatePayment = advances.some((item) => item.employee_id === Number(form.employee_id)
-    && item.payment_date === form.payment_date);
+    && item.payment_date === form.payment_date && item.id !== editingAdvanceId);
+  const openNew = () => {
+    setEditingAdvanceId(null);
+    setForm({ ...initialForm, payment_date: today() });
+    setOpen(true);
+  };
+  const openEdit = (item) => {
+    setEditingAdvanceId(item.id);
+    setForm({
+      employee_id: String(item.employee_id),
+      payment_date: item.payment_date,
+      amount: (item.amount_paise / 100).toFixed(2),
+      method: item.method,
+      reference_number: item.reference_number || '',
+      remarks: item.remarks || ''
+    });
+    setOpen(true);
+  };
+  const closePaymentDialog = () => {
+    setOpen(false);
+    setEditingAdvanceId(null);
+    setForm({ ...initialForm, payment_date: today() });
+  };
   const submit = async () => {
     if (duplicatePayment) {
       notify('A weekly payment is already recorded for this labourer on this date', 'error');
@@ -45,13 +69,18 @@ export default function Advances({ notify }) {
     }
     setSaving(true);
     try {
-      await window.payroll.advances.create({
+      const payment = {
         ...form, employee_id: Number(form.employee_id), amount_paise: paiseFromRupees(form.amount)
-      });
-      notify('Weekly payment recorded. It will be deducted from the next labour bill.');
-      setOpen(false);
-      setForm(initialForm);
-      load();
+      };
+      if (editingAdvanceId) {
+        await window.payroll.advances.update({ ...payment, id: editingAdvanceId });
+        notify('Weekly payment updated');
+      } else {
+        await window.payroll.advances.create(payment);
+        notify('Weekly payment recorded. It will be deducted from the next labour bill.');
+      }
+      closePaymentDialog();
+      await load();
     } catch (error) { notify(error.message, 'error'); }
     finally { setSaving(false); }
   };
@@ -72,7 +101,7 @@ export default function Advances({ notify }) {
     finally { setSavingAdjustment(false); }
   };
   return <>
-    <ScreenHeader title="Weekly payments" subtitle="Record money already paid to each labourer. It will be deducted automatically when you make a labour bill." actionLabel="Record weekly payment" onAction={() => setOpen(true)} icon={AddOutlined} />
+    <ScreenHeader title="Weekly payments" subtitle="Record money already paid to each labourer. It will be deducted automatically when you make a labour bill." actionLabel="Record weekly payment" onAction={openNew} icon={AddOutlined} />
     <Grid container spacing={2} sx={{ mb: 3 }}>
       <Grid item xs={12} sm={6}><Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}><CardContent>
         <Stack direction="row" justifyContent="space-between"><Box><Typography variant="body2" color="text.secondary">Payments waiting to be deducted</Typography><Typography variant="h5" sx={{ mt: 1 }}>{rupees(outstanding)}</Typography></Box>
@@ -89,10 +118,14 @@ export default function Advances({ notify }) {
           <TableCell>{prettyDate(item.payment_date)}</TableCell>
           <TableCell align="right">{rupees(item.amount_paise)}</TableCell>
           <TableCell align="right"><Typography fontWeight={650} color={item.outstanding_paise ? 'warning.main' : 'success.main'}>{rupees(item.outstanding_paise)}</Typography></TableCell>
-          <TableCell align="right"><Button size="small" startIcon={<EditOutlined />} onClick={() => {
+          <TableCell align="right">
+            <Tooltip title="Edit payment details"><IconButton size="small" aria-label={`Edit payment for ${item.full_name}`} onClick={() => openEdit(item)}>
+              <EditOutlined fontSize="small" />
+            </IconButton></Tooltip>
+            <Button size="small" onClick={() => {
             setAdjustmentAdvance(item);
             setAdjustment(initialAdjustment);
-          }}>Fix amount</Button></TableCell>
+          }}>Fix balance</Button></TableCell>
         </TableRow>)}
           {!advances.length && <TableRow><TableCell colSpan={5}><Typography color="text.secondary" textAlign="center" sx={{ py: 5 }}>No weekly payments recorded. Select “Record weekly payment” when you pay a labourer.</Typography></TableCell></TableRow>}
         </TableBody>
@@ -111,13 +144,17 @@ export default function Advances({ notify }) {
         </TableBody>
       </Table></Box>
     </Paper>
-    <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
-      <DialogTitle>Record a weekly payment</DialogTitle>
+    <Dialog open={open} onClose={closePaymentDialog} maxWidth="sm" fullWidth>
+      <DialogTitle>{editingAdvanceId ? 'Edit weekly payment' : 'Record a weekly payment'}</DialogTitle>
       <DialogContent dividers><Stack spacing={2} sx={{ pt: 1 }}>
-        <TextField select required label="Employee" value={form.employee_id} onChange={setField('employee_id')}>
-          {employees.filter((item) => item.status === 'Active').map((item) => <MenuItem key={item.id} value={item.id}>{item.full_name} · {item.employee_code}</MenuItem>)}
+        <TextField select required label="Employee" value={form.employee_id} onChange={setField('employee_id')} disabled={Boolean(editingAdvanceId)}>
+          {employees.filter((item) => item.status === 'Active' || item.id === Number(form.employee_id)).map((item) => <MenuItem key={item.id} value={item.id}>{item.full_name} · {item.employee_code}</MenuItem>)}
         </TextField>
-        <Typography variant="body2" color="text.secondary">Enter each amount you have already given this labourer. It will be subtracted from their next labour bill.</Typography>
+        <Typography variant="body2" color="text.secondary">
+          {editingAdvanceId
+            ? 'Update the recorded payment details. Amounts already deducted from bills cannot be reduced.'
+            : 'Enter each amount you have already given this labourer. It will be subtracted from their next labour bill.'}
+        </Typography>
         {duplicatePayment && <Alert severity="warning">A payment for this labourer is already recorded on this date. Choose a different date.</Alert>}
         <Grid container spacing={2}><Grid item xs={6}><TextField fullWidth required label="Date paid" type="date" InputLabelProps={{ shrink: true }} value={form.payment_date} onChange={setField('payment_date')} /></Grid>
           <Grid item xs={6}><TextField fullWidth required label="Amount paid (₹)" type="number" inputProps={{ min: 0.01, step: '0.01' }} value={form.amount} onChange={setField('amount')} /></Grid></Grid>
@@ -127,8 +164,10 @@ export default function Advances({ notify }) {
         <TextField label="Reference number" value={form.reference_number} onChange={setField('reference_number')} />
         <TextField label="Remarks" multiline minRows={2} value={form.remarks} onChange={setField('remarks')} />
       </Stack></DialogContent>
-      <DialogActions sx={{ px: 3, py: 2 }}><Button onClick={() => setOpen(false)}>Cancel</Button>
-        <Button variant="contained" disabled={saving || duplicatePayment || !form.employee_id || !form.amount || Number(form.amount) <= 0} onClick={submit}>{saving ? 'Saving…' : 'Save weekly payment'}</Button></DialogActions>
+      <DialogActions sx={{ px: 3, py: 2 }}><Button onClick={closePaymentDialog}>Cancel</Button>
+        <Button variant="contained" disabled={saving || duplicatePayment || !form.employee_id || !form.amount || Number(form.amount) <= 0} onClick={submit}>
+          {saving ? 'Saving…' : editingAdvanceId ? 'Update weekly payment' : 'Save weekly payment'}
+        </Button></DialogActions>
     </Dialog>
     <Dialog open={Boolean(adjustmentAdvance)} onClose={() => setAdjustmentAdvance(null)} maxWidth="sm" fullWidth>
       <DialogTitle>Correct weekly payment</DialogTitle>

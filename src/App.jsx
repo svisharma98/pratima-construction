@@ -74,8 +74,8 @@ export default function App({ mode, setMode }) {
     </List>
     <Box sx={{ flex: 1 }} />
     <Box sx={{ mx: 2, mb: 2, p: 1.5, bgcolor: 'action.hover', borderRadius: 2 }}>
-      <Typography variant="caption" color="text.secondary">Offline workspace</Typography>
-      <Typography variant="body2" fontWeight={600} sx={{ mt: 0.3 }}>Your data stays on this device.</Typography>
+      <Typography variant="caption" color="text.secondary">Core Soft Team</Typography>
+      <Typography variant="body2" fontWeight={600} sx={{ mt: 0.3 }}>Designed & Developed ❤️ by Core Soft Team</Typography>
     </Box>
     <List sx={{ px: 1.4, pt: 0, pb: 1.5 }}>
       <ListItemButton onClick={exitApp} sx={{ minHeight: 44, borderRadius: 2, color: 'text.secondary' }}>
