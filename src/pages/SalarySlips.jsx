@@ -88,39 +88,16 @@ function makeSlip(record, company) {
 
   doc.text(record.payment_date ? `Paid ${prettyDate(record.payment_date)}` : 'Payment pending', right, 34, { align: 'right' });
 
-  doc.setFillColor(239, 247, 246);
-  doc.setDrawColor(215, 232, 228);
-  doc.roundedRect(left, 55, contentWidth, 37, 2.5, 2.5, 'FD');
-  sectionLabel('NET PAYABLE', left + 7, 64);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(19);
-  doc.setTextColor(23, 109, 101);
-  doc.text(pdfMoney(record.net_paise), left + 7, 78);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(88, 101, 120);
-  doc.text(`Work period  ${prettyDate(record.period_start)} – ${prettyDate(record.period_end)}`, left + 7, 86);
-  doc.setDrawColor(215, 232, 228);
-  doc.line(119, 62, 119, 85);
-  sectionLabel('PAYMENT STATUS', 126, 65);
-  fitText(record.status || 'Pending', 126, 73, 58, 10, 'bold');
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(88, 101, 120);
-  doc.text(`Paid  ${pdfMoney(record.paid_paise)}`, 126, 80);
-  doc.text(`Balance  ${pdfMoney(record.net_paise - record.paid_paise)}`, 126, 87);
-
-  sectionLabel('EMPLOYEE DETAILS', left, 104);
+  sectionLabel('EMPLOYEE DETAILS', left, 57);
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(226, 231, 237);
-  doc.roundedRect(left, 109, contentWidth, 40, 2, 2, 'FD');
-  drawField('Labourer', record.full_name, left + 6, 118, 52);
-  drawField('Employee ID', record.employee_code, left + 65, 118, 46);
-  drawField('Designation', record.designation, left + 119, 118, 52);
-  drawField(isLabourBill ? 'Daily rate (8 hours)' : 'Pay frequency',
-    isLabourBill ? pdfMoney(record.basic_paise) : record.frequency, left + 6, 136, 52);
-  drawField('Period from', prettyDate(record.period_start), left + 65, 136, 46);
-  drawField('Period to', prettyDate(record.period_end), left + 119, 136, 52);
+  doc.roundedRect(left, 62, contentWidth, 40, 2, 2, 'FD');
+  drawField('Labourer', record.full_name, left + 6, 71, 52);
+  drawField('Employee ID', record.employee_code, left + 65, 71, 46);
+  drawField('Designation', record.designation, left + 119, 71, 52);
+  drawField('Pay frequency', record.frequency, left + 6, 89, 52);
+  drawField('Period from', prettyDate(record.period_start), left + 65, 89, 46);
+  drawField('Period to', prettyDate(record.period_end), left + 119, 89, 52);
 
   const rows = isLabourBill
     ? [
@@ -145,7 +122,7 @@ function makeSlip(record, company) {
     ['Amount paid', record.paid_paise],
     ['Remaining balance', record.net_paise - record.paid_paise, 'balance']
   );
-  const tableY = 160;
+  const tableY = 113;
   const headerHeight = 9;
   const rowHeight = 7.3;
   doc.setFillColor(35, 54, 79);
@@ -194,6 +171,13 @@ function makeSlip(record, company) {
     sectionLabel(label, x, attendanceTop + 11);
     fitText(String(value), x, attendanceTop + 18, 48, 9, 'bold', [47, 57, 72]);
   });
+  if (isLabourBill) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(110, 119, 132);
+    doc.text(`Rate note: ${pdfMoney(Number(record.basic_paise) / 8)} per hour · ${pdfMoney(record.basic_paise)} per day (8 hours)`,
+      left + 1, attendanceTop + 31);
+  }
   doc.setDrawColor(226, 231, 237);
   doc.line(left, 282, right, 282);
   doc.setFont('helvetica', 'normal');
