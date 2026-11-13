@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Avatar, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, MenuItem,
+  Alert, Avatar, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, MenuItem,
   Paper, Stack, Table, TableBody, TableCell, TableHead, TablePagination, TableRow,
   TextField, Tooltip, Typography
 } from '@mui/material';
@@ -12,7 +12,7 @@ import { paiseFromRupees, rupees, today } from '../lib/format.js';
 const empty = () => ({
   full_name: '', mobile: '', email: '', address: '', joining_date: today(), profile_photo_data: '',
   designation: '', department: '', employment_type: 'Full-time', status: 'Active',
-  emergency_contact: '', bank_details: '', basic_salary: '', payment_frequency: 'Monthly', working_days: '26'
+  emergency_contact: '', bank_details: '', daily_rate: ''
 });
 
 export default function Employees({ notify }) {
@@ -31,8 +31,12 @@ export default function Employees({ notify }) {
   const openEdit = (employee) => {
     setForm({
       ...employee,
-      basic_salary: employee.basic_salary_paise == null ? '' : (employee.basic_salary_paise / 100).toFixed(2),
-      working_days: String(employee.working_days || 26),
+      email: employee.email || '',
+      address: employee.address || '',
+      emergency_contact: employee.emergency_contact || '',
+      bank_details: employee.bank_details || '',
+      profile_photo_data: employee.profile_photo_data || '',
+      daily_rate: employee.daily_rate_paise == null ? '' : (employee.daily_rate_paise / 100).toFixed(2),
       department: employee.department || ''
     });
     setDialog(true);
@@ -48,8 +52,8 @@ export default function Employees({ notify }) {
     setSaving(true);
     try {
       const code = await window.payroll.employees.save({
-        ...form, id: form.id || undefined, working_days: Number(form.working_days),
-        basic_salary_paise: paiseFromRupees(form.basic_salary)
+        ...form, id: form.id || undefined,
+        daily_rate_paise: paiseFromRupees(form.daily_rate)
       });
       notify(`${form.id ? 'Employee updated' : `Employee ${code} created`} successfully`);
       setDialog(false);
@@ -59,13 +63,16 @@ export default function Employees({ notify }) {
     } finally { setSaving(false); }
   };
   const deactivate = async (employee) => {
-    if (!window.confirm(`Deactivate ${employee.full_name}? Existing attendance and salary records will be retained.`)) return;
+    if (!window.confirm(`Deactivate ${employee.full_name}? Existing attendance and labour bills will be retained.`)) return;
     try { await window.payroll.employees.deactivate({ id: employee.id }); notify('Employee deactivated'); load(); }
     catch (error) { notify(error.message, 'error'); }
   };
   const pageRows = employees.slice(page * 10, page * 10 + 10);
   return <>
-    <ScreenHeader title="Employees" subtitle="Manage employee profiles, employment details and salary setup." actionLabel="Add employee" onAction={openNew} icon={AddOutlined} />
+    <ScreenHeader title="Labourers" subtitle="Manage labour profiles and individual daily wage rates." actionLabel="Add labourer" onAction={openNew} icon={AddOutlined} />
+    {employees.some((employee) => employee.daily_rate_needs_review) && <Alert severity="warning" sx={{ mb: 2 }}>
+      Existing saved salary amounts need review as daily rates. Edit each affected labourer and save the correct 8-hour daily rate before processing a labour bill.
+    </Alert>}
     <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ p: 2 }}>
         <TextField size="small" placeholder="Search name, ID or phone" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0); }}
@@ -75,7 +82,7 @@ export default function Employees({ notify }) {
         </TextField>
       </Stack>
       <Box className="page-table-wrap"><Table>
-        <TableHead><TableRow><TableCell>Employee</TableCell><TableCell>Role / department</TableCell><TableCell>Phone</TableCell><TableCell>Salary setup</TableCell><TableCell>Status</TableCell><TableCell align="right">Actions</TableCell></TableRow></TableHead>
+        <TableHead><TableRow><TableCell>Labourer</TableCell><TableCell>Role / department</TableCell><TableCell>Phone</TableCell><TableCell>Daily rate</TableCell><TableCell>Status</TableCell><TableCell align="right">Actions</TableCell></TableRow></TableHead>
         <TableBody>{pageRows.map((employee) => <TableRow key={employee.id} hover>
           <TableCell><Stack direction="row" spacing={1.2} alignItems="center">
             <Avatar src={employee.profile_photo_data || undefined} sx={{ width: 36, height: 36 }}>{employee.full_name?.[0]}</Avatar>
@@ -83,7 +90,7 @@ export default function Employees({ notify }) {
           </Stack></TableCell>
           <TableCell>{employee.designation}<Typography variant="caption" display="block" color="text.secondary">{employee.department || 'Unassigned'}</Typography></TableCell>
           <TableCell>{employee.mobile}</TableCell>
-          <TableCell>{employee.basic_salary_paise == null ? '—' : <>{rupees(employee.basic_salary_paise)} <Typography variant="caption" color="text.secondary">/ {employee.payment_frequency?.toLowerCase()}</Typography></>}</TableCell>
+          <TableCell>{employee.daily_rate_paise == null ? '—' : <>{rupees(employee.daily_rate_paise)} <Typography variant="caption" color="text.secondary">/ day (8h)</Typography></>}</TableCell>
           <TableCell><StatusChip status={employee.status} /></TableCell>
           <TableCell align="right"><Tooltip title="View profile"><IconButton size="small" onClick={() => setProfile(employee)}><InfoOutlined fontSize="small" /></IconButton></Tooltip>
             <Tooltip title="Edit"><IconButton size="small" onClick={() => openEdit(employee)}><EditOutlined fontSize="small" /></IconButton></Tooltip>
@@ -116,19 +123,16 @@ export default function Employees({ notify }) {
         <TextField select label="Status" value={form.status} onChange={setField('status')}>
           {['Active', 'Inactive'].map((item) => <MenuItem key={item} value={item}>{item}</MenuItem>)}
         </TextField>
-        <TextField required label="Basic salary (₹)" type="number" inputProps={{ min: 0, step: '0.01' }} value={form.basic_salary} onChange={setField('basic_salary')} />
-        <TextField select label="Payment frequency" value={form.payment_frequency || 'Monthly'} onChange={(event) => {
-          setForm((current) => ({ ...current, payment_frequency: event.target.value, working_days: event.target.value === 'Weekly' ? '6' : '26' }));
-        }}>
-          {['Monthly', 'Weekly'].map((item) => <MenuItem key={item} value={item}>{item}</MenuItem>)}
-        </TextField>
-        <TextField label="Working days per period" type="number" inputProps={{ min: 1, max: 31 }} value={form.working_days} onChange={setField('working_days')} />
+        <TextField required label="Daily rate for 8 hours (₹)" type="number" inputProps={{ min: 0.01, step: '0.01' }} value={form.daily_rate} onChange={setField('daily_rate')} />
+        <Typography variant="caption" color="text.secondary" sx={{ gridColumn: { sm: '1 / -1' } }}>
+          Hourly pay is calculated as the daily rate ÷ 8. Hours above 8 are paid at the same hourly rate.
+        </Typography>
         <TextField label="Emergency contact" value={form.emergency_contact || ''} onChange={setField('emergency_contact')} />
         <TextField label="Bank account details" value={form.bank_details || ''} onChange={setField('bank_details')} />
         <TextField label="Address" multiline minRows={2} value={form.address || ''} onChange={setField('address')} sx={{ gridColumn: { sm: '1 / -1' } }} />
       </Box></DialogContent>
       <DialogActions sx={{ px: 3, py: 2 }}><Button onClick={() => setDialog(false)}>Cancel</Button>
-        <Button variant="contained" disabled={saving || !form.full_name || !form.mobile || !form.designation || form.basic_salary === ''} onClick={submit}>{saving ? 'Saving…' : form.id ? 'Save changes' : 'Create employee'}</Button></DialogActions>
+        <Button variant="contained" disabled={saving || !form.full_name || !form.mobile || !form.designation || !form.daily_rate || Number(form.daily_rate) <= 0} onClick={submit}>{saving ? 'Saving…' : form.id ? 'Save changes' : 'Create labourer'}</Button></DialogActions>
     </Dialog>
     <Dialog open={Boolean(profile)} onClose={() => setProfile(null)} maxWidth="sm" fullWidth>
       <DialogTitle>Employee profile</DialogTitle>
@@ -144,8 +148,8 @@ export default function Employees({ notify }) {
             ['Designation', profile.designation], ['Department', profile.department || 'Unassigned'],
             ['Mobile', profile.mobile], ['Email', profile.email || '—'],
             ['Joining date', profile.joining_date], ['Employment type', profile.employment_type],
-            ['Status', profile.status], ['Payment frequency', profile.payment_frequency],
-            ['Basic salary', rupees(profile.basic_salary_paise)], ['Working days', profile.working_days],
+            ['Status', profile.status],
+            ['Daily rate (8 hours)', rupees(profile.daily_rate_paise)],
             ['Emergency contact', profile.emergency_contact || '—'], ['Bank details', profile.bank_details || '—'],
             ['Address', profile.address || '—']
             ].map(([label, value]) => <Box key={label}>

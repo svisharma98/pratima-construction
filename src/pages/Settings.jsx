@@ -53,7 +53,7 @@ export default function Settings({ notify }) {
     finally { setBusy(false); }
   };
   const restore = async () => {
-    if (!window.confirm('Restoring replaces the current employee, attendance, salary and payment records. Make sure you have a recent backup. Continue?')) return;
+    if (!window.confirm('Restoring replaces the current labourer, attendance, wage bill and payment records. Make sure you have a recent backup. Continue?')) return;
     setBusy(true);
     try {
       const result = await window.payroll.restore();
@@ -66,13 +66,13 @@ export default function Settings({ notify }) {
     finally { setBusy(false); }
   };
   return <>
-    <ScreenHeader title="Settings" subtitle="Configure company details, payroll defaults and local database backups." />
+    <ScreenHeader title="Settings" subtitle="Configure company details and local database backups." />
     <Grid container spacing={2.5}>
       <Grid item xs={12} lg={8}>
         <Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
           <CardContent sx={{ p: 2.5 }}>
             <Typography variant="h6">Company information</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>These details are included on generated salary slips.</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>These details are included on generated wage statements.</Typography>
             <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2.5 }}>
               <Avatar variant="rounded" src={form.company_logo_data || undefined} sx={{ width: 64, height: 64, bgcolor: 'action.hover' }}>
                 {!form.company_logo_data && <ImageOutlined color="disabled" />}
@@ -87,7 +87,7 @@ export default function Settings({ notify }) {
             </Grid>
             <Divider sx={{ my: 2.5 }} />
             <Typography variant="h6">Payroll and attendance</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>Employee-specific salary frequencies and working day settings are managed in each profile.</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>Each labourer's daily rate and attendance hours determine their labour bill. The standard day is 8 hours.</Typography>
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}><TextField fullWidth select label="Currency" value={form.currency} onChange={setField('currency')} SelectProps={{ native: true }}>
                 <option value="INR">Indian Rupee (₹)</option>
@@ -96,8 +96,6 @@ export default function Settings({ notify }) {
                 <option value="DD/MM/YYYY">DD/MM/YYYY</option><option value="MM/DD/YYYY">MM/DD/YYYY</option><option value="YYYY-MM-DD">YYYY-MM-DD</option>
               </TextField></Grid>
               <Grid item xs={12} sm={6}><TextField fullWidth label="Financial year starts (MM-DD)" value={form.financial_year_start} onChange={setField('financial_year_start')} /></Grid>
-              <Grid item xs={12} sm={6}><TextField fullWidth label="Default working days / month" type="number" inputProps={{ min: 1, max: 31 }} value={form.default_working_days} onChange={setField('default_working_days')} /></Grid>
-              <Grid item xs={12}><TextField fullWidth label="Default weekly off days" value={form.weekly_off_days} onChange={setField('weekly_off_days')} helperText="For example: Sunday, or Sunday,Thursday" /></Grid>
             </Grid>
             <Stack direction="row" justifyContent="flex-end" sx={{ mt: 2.5 }}>
               <Button variant="contained" startIcon={<SaveOutlined />} disabled={saving || !form.company_name} onClick={save}>{saving ? 'Saving…' : 'Save settings'}</Button>

@@ -42,7 +42,7 @@ export default function Advances({ notify }) {
       await window.payroll.advances.create({
         ...form, employee_id: Number(form.employee_id), amount_paise: paiseFromRupees(form.amount)
       });
-      notify('Advance payment recorded');
+      notify('Weekly payment recorded. It will be deducted from the next labour bill.');
       setOpen(false);
       setForm(initialForm);
       load();
@@ -58,7 +58,7 @@ export default function Advances({ notify }) {
         amount_paise: paiseFromRupees(adjustment.amount),
         reason: adjustment.reason
       });
-      notify('Advance balance adjustment recorded');
+      notify('Weekly payment balance corrected');
       setAdjustmentAdvance(null);
       setAdjustment(initialAdjustment);
       load();
@@ -66,36 +66,34 @@ export default function Advances({ notify }) {
     finally { setSavingAdjustment(false); }
   };
   return <>
-    <ScreenHeader title="Advance payments" subtitle="Record employee advances and track balances awaiting salary adjustment." actionLabel="Give advance" onAction={() => setOpen(true)} icon={AddOutlined} />
+    <ScreenHeader title="Weekly payments" subtitle="Record money already paid to each labourer. It will be deducted automatically when you make a labour bill." actionLabel="Record weekly payment" onAction={() => setOpen(true)} icon={AddOutlined} />
     <Grid container spacing={2} sx={{ mb: 3 }}>
       <Grid item xs={12} sm={6}><Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}><CardContent>
-        <Stack direction="row" justifyContent="space-between"><Box><Typography variant="body2" color="text.secondary">Advance outstanding</Typography><Typography variant="h5" sx={{ mt: 1 }}>{rupees(outstanding)}</Typography></Box>
+        <Stack direction="row" justifyContent="space-between"><Box><Typography variant="body2" color="text.secondary">Payments waiting to be deducted</Typography><Typography variant="h5" sx={{ mt: 1 }}>{rupees(outstanding)}</Typography></Box>
           <AccountBalanceWalletOutlined color="primary" /></Stack></CardContent></Card></Grid>
       <Grid item xs={12} sm={6}><Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}><CardContent>
-        <Stack direction="row" justifyContent="space-between"><Box><Typography variant="body2" color="text.secondary">Total advances paid</Typography><Typography variant="h5" sx={{ mt: 1 }}>{rupees(total)}</Typography></Box>
+        <Stack direction="row" justifyContent="space-between"><Box><Typography variant="body2" color="text.secondary">Total weekly payments recorded</Typography><Typography variant="h5" sx={{ mt: 1 }}>{rupees(total)}</Typography></Box>
           <AccountBalanceWalletOutlined color="secondary" /></Stack></CardContent></Card></Grid>
     </Grid>
     <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
-      <Box sx={{ p: 2 }}><Typography fontWeight={700}>Advance payment history</Typography></Box>
-      <Box className="page-table-wrap"><Table><TableHead><TableRow><TableCell>Transaction</TableCell><TableCell>Employee</TableCell><TableCell>Date</TableCell><TableCell>Method</TableCell><TableCell align="right">Amount</TableCell><TableCell align="right">Outstanding</TableCell><TableCell>Reference</TableCell><TableCell align="right">Action</TableCell></TableRow></TableHead>
+      <Box sx={{ p: 2 }}><Typography fontWeight={700}>Weekly payments</Typography></Box>
+      <Box className="page-table-wrap"><Table><TableHead><TableRow><TableCell>Labourer</TableCell><TableCell>Date paid</TableCell><TableCell align="right">Amount paid</TableCell><TableCell align="right">Not yet deducted</TableCell><TableCell align="right">Action</TableCell></TableRow></TableHead>
         <TableBody>{advances.map((item) => <TableRow key={item.id}>
-          <TableCell><Typography variant="caption" fontWeight={650}>{item.transaction_id}</Typography></TableCell>
           <TableCell>{item.full_name}<Typography variant="caption" display="block" color="text.secondary">{item.employee_code}</Typography></TableCell>
-          <TableCell>{prettyDate(item.payment_date)}</TableCell><TableCell>{item.method}</TableCell>
+          <TableCell>{prettyDate(item.payment_date)}</TableCell>
           <TableCell align="right">{rupees(item.amount_paise)}</TableCell>
           <TableCell align="right"><Typography fontWeight={650} color={item.outstanding_paise ? 'warning.main' : 'success.main'}>{rupees(item.outstanding_paise)}</Typography></TableCell>
-          <TableCell>{item.reference_number || '—'}</TableCell>
           <TableCell align="right"><Button size="small" startIcon={<EditOutlined />} onClick={() => {
             setAdjustmentAdvance(item);
             setAdjustment(initialAdjustment);
-          }}>Adjust</Button></TableCell>
+          }}>Fix amount</Button></TableCell>
         </TableRow>)}
-          {!advances.length && <TableRow><TableCell colSpan={8}><Typography color="text.secondary" textAlign="center" sx={{ py: 5 }}>No advances have been recorded.</Typography></TableCell></TableRow>}
+          {!advances.length && <TableRow><TableCell colSpan={5}><Typography color="text.secondary" textAlign="center" sx={{ py: 5 }}>No weekly payments recorded. Select “Record weekly payment” when you pay a labourer.</Typography></TableCell></TableRow>}
         </TableBody>
       </Table></Box>
     </Paper>
     <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', overflow: 'hidden', mt: 3 }}>
-      <Box sx={{ p: 2 }}><Typography fontWeight={700}>Advance adjustment history</Typography></Box>
+      <Box sx={{ p: 2 }}><Typography fontWeight={700}>Payments deducted from bills</Typography></Box>
       <Box className="page-table-wrap"><Table size="small"><TableHead><TableRow><TableCell>Transaction</TableCell><TableCell>Employee</TableCell><TableCell>Date</TableCell><TableCell>Type</TableCell><TableCell>Direction</TableCell><TableCell align="right">Amount</TableCell><TableCell>Reason</TableCell></TableRow></TableHead>
         <TableBody>{adjustments.map((item) => <TableRow key={item.transaction_id}>
           <TableCell>{item.transaction_id}</TableCell><TableCell>{item.full_name}</TableCell>
@@ -103,18 +101,19 @@ export default function Advances({ notify }) {
           <TableCell>{item.type}</TableCell><TableCell>{item.direction}</TableCell>
           <TableCell align="right">{rupees(item.amount_paise)}</TableCell><TableCell>{item.reason}</TableCell>
         </TableRow>)}
-          {!adjustments.length && <TableRow><TableCell colSpan={7}><Typography color="text.secondary" textAlign="center" sx={{ py: 4 }}>Advance adjustments will be recorded here.</Typography></TableCell></TableRow>}
+          {!adjustments.length && <TableRow><TableCell colSpan={7}><Typography color="text.secondary" textAlign="center" sx={{ py: 4 }}>After a labour bill is made, the amount deducted appears here.</Typography></TableCell></TableRow>}
         </TableBody>
       </Table></Box>
     </Paper>
     <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
-      <DialogTitle>Give employee advance</DialogTitle>
+      <DialogTitle>Record a weekly payment</DialogTitle>
       <DialogContent dividers><Stack spacing={2} sx={{ pt: 1 }}>
         <TextField select required label="Employee" value={form.employee_id} onChange={setField('employee_id')}>
           {employees.filter((item) => item.status === 'Active').map((item) => <MenuItem key={item.id} value={item.id}>{item.full_name} · {item.employee_code}</MenuItem>)}
         </TextField>
-        <Grid container spacing={2}><Grid item xs={6}><TextField fullWidth required label="Payment date" type="date" InputLabelProps={{ shrink: true }} value={form.payment_date} onChange={setField('payment_date')} /></Grid>
-          <Grid item xs={6}><TextField fullWidth required label="Amount (₹)" type="number" inputProps={{ min: 0.01, step: '0.01' }} value={form.amount} onChange={setField('amount')} /></Grid></Grid>
+        <Typography variant="body2" color="text.secondary">Enter each amount you have already given this labourer. It will be subtracted from their next labour bill.</Typography>
+        <Grid container spacing={2}><Grid item xs={6}><TextField fullWidth required label="Date paid" type="date" InputLabelProps={{ shrink: true }} value={form.payment_date} onChange={setField('payment_date')} /></Grid>
+          <Grid item xs={6}><TextField fullWidth required label="Amount paid (₹)" type="number" inputProps={{ min: 0.01, step: '0.01' }} value={form.amount} onChange={setField('amount')} /></Grid></Grid>
         <TextField select label="Payment method" value={form.method} onChange={setField('method')}>
           {['Cash', 'Bank', 'UPI'].map((method) => <MenuItem key={method} value={method}>{method}</MenuItem>)}
         </TextField>
@@ -122,10 +121,10 @@ export default function Advances({ notify }) {
         <TextField label="Remarks" multiline minRows={2} value={form.remarks} onChange={setField('remarks')} />
       </Stack></DialogContent>
       <DialogActions sx={{ px: 3, py: 2 }}><Button onClick={() => setOpen(false)}>Cancel</Button>
-        <Button variant="contained" disabled={saving || !form.employee_id || !form.amount || Number(form.amount) <= 0} onClick={submit}>{saving ? 'Saving…' : 'Record advance'}</Button></DialogActions>
+        <Button variant="contained" disabled={saving || !form.employee_id || !form.amount || Number(form.amount) <= 0} onClick={submit}>{saving ? 'Saving…' : 'Save weekly payment'}</Button></DialogActions>
     </Dialog>
     <Dialog open={Boolean(adjustmentAdvance)} onClose={() => setAdjustmentAdvance(null)} maxWidth="sm" fullWidth>
-      <DialogTitle>Adjust advance balance</DialogTitle>
+      <DialogTitle>Correct weekly payment</DialogTitle>
       <DialogContent dividers><Stack spacing={2} sx={{ pt: 1 }}>
         <Typography variant="body2" color="text.secondary">{adjustmentAdvance?.full_name} · Current outstanding {rupees(adjustmentAdvance?.outstanding_paise || 0)}</Typography>
         <TextField select label="Adjustment" value={adjustment.direction} onChange={setAdjustmentField('direction')}>

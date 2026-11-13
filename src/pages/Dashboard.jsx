@@ -52,12 +52,12 @@ export default function Dashboard({ notify }) {
     <Grid container spacing={2}>
       <Grid item xs={12} sm={6} xl={2}><Metric label="Total employees" value={data.employees.total} note="All records" icon={Groups2Outlined} tone="primary" /></Grid>
       <Grid item xs={12} sm={6} xl={2}><Metric label="Active employees" value={data.employees.active} note="Currently employed" icon={PersonOutline} tone="success" /></Grid>
-      <Grid item xs={12} sm={6} xl={2}><Metric label="Present today" value={data.attendance.present} note="Marked present / half day" icon={TrendingUpOutlined} tone="secondary" /></Grid>
+      <Grid item xs={12} sm={6} xl={2}><Metric label="Present today" value={data.attendance.present} note="Labour marked present" icon={TrendingUpOutlined} tone="secondary" /></Grid>
       <Grid item xs={12} sm={6} xl={2}><Metric label="Absent today" value={data.attendance.absent} note="Marked absent" icon={PersonOffOutlined} tone="error" /></Grid>
-      <Grid item xs={12} sm={6} xl={2}><Metric label="Month salary expense" value={rupees(data.salary.expense)} note="Processed this month" icon={PaymentsOutlined} tone="primary" /></Grid>
-      <Grid item xs={12} sm={6} xl={2}><Metric label="Pending salary" value={rupees(data.salary.pending)} note="Unpaid balance" icon={AccountBalanceWalletOutlined} tone="warning" /></Grid>
+      <Grid item xs={12} sm={6} xl={2}><Metric label="Month labour bills" value={rupees(data.salary.expense)} note="Processed this month" icon={PaymentsOutlined} tone="primary" /></Grid>
+      <Grid item xs={12} sm={6} xl={2}><Metric label="Pending labour pay" value={rupees(data.salary.pending)} note="Unpaid balance" icon={AccountBalanceWalletOutlined} tone="warning" /></Grid>
       <Grid item xs={12} md={8}>
-        <Panel title="Salary expenses" subtitle="Processed payroll by month">
+        <Panel title="Labour bill expenses" subtitle="Processed labour payments by month">
           <Box sx={{ height: 260 }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data.salaryTrend}>
@@ -65,7 +65,7 @@ export default function Dashboard({ notify }) {
                 <XAxis dataKey="month" tickLine={false} axisLine={false} />
                 <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `₹${Math.round(value / 100000)}k`} />
                 <ChartTooltip formatter={(value) => rupees(value)} />
-                <Line type="monotone" dataKey="amount" name="Salary" stroke={colors[0]} strokeWidth={3} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="amount" name="Labour bills" stroke={colors[0]} strokeWidth={3} dot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </Box>
@@ -90,7 +90,7 @@ export default function Dashboard({ notify }) {
         </Panel>
       </Grid>
       <Grid item xs={12} md={7}>
-        <Panel title="Monthly attendance percentage" subtitle="Present, half day and paid leave attendance">
+        <Panel title="Monthly attendance percentage" subtitle="Present days as a share of recorded attendance">
           <Box sx={{ height: 220 }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data.attendanceTrend}>
@@ -105,15 +105,15 @@ export default function Dashboard({ notify }) {
         </Panel>
       </Grid>
       <Grid item xs={12} md={5}>
-        <Panel title="Recent salary transactions" subtitle="Latest processed salary periods">
+        <Panel title="Recent labour bills" subtitle="Latest processed wage periods">
           {data.recentSalaries.length ? <Box className="page-table-wrap">
-            <Table size="small"><TableHead><TableRow><TableCell>Employee</TableCell><TableCell>Period</TableCell><TableCell align="right">Net pay</TableCell><TableCell>Status</TableCell></TableRow></TableHead>
+            <Table size="small"><TableHead><TableRow><TableCell>Labourer</TableCell><TableCell>Period</TableCell><TableCell align="right">Net pay</TableCell><TableCell>Status</TableCell></TableRow></TableHead>
               <TableBody>{data.recentSalaries.map((row) => <TableRow key={row.transaction_id}>
                 <TableCell>{row.full_name}</TableCell><TableCell>{prettyDate(row.period_start)}</TableCell>
                 <TableCell align="right">{rupees(row.net_paise)}</TableCell><TableCell><StatusChip status={row.status} /></TableCell>
               </TableRow>)}</TableBody>
             </Table>
-          </Box> : <Stack alignItems="center" sx={{ py: 5 }}><PersonOffOutlined color="disabled" /><Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>No salary transactions yet</Typography></Stack>}
+          </Box> : <Stack alignItems="center" sx={{ py: 5 }}><PersonOffOutlined color="disabled" /><Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>No labour bills yet</Typography></Stack>}
         </Panel>
       </Grid>
       <Grid item xs={12}>

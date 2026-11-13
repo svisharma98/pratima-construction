@@ -1,21 +1,13 @@
 function calculateSalary({
-  basicPaise,
-  paymentFrequency,
-  workingDays,
-  attendanceCounts,
+  dailyRatePaise,
+  attendanceHours,
   bonusPaise,
-  overtimePaise,
   allowancesPaise,
   deductionsPaise,
   advances
 }) {
-  const unpaidDays = (attendanceCounts.Absent || 0) + (attendanceCounts['Unpaid Leave'] || 0);
-  const halfDays = attendanceCounts['Half Day'] || 0;
-  const unpaidDayUnits = unpaidDays + halfDays * 0.5;
-  const divisor = paymentFrequency === 'Weekly' ? Math.min(workingDays, 7) : workingDays;
-  const unpaidDeductionPaise = Math.round(basicPaise * unpaidDayUnits / divisor);
-  const grossPaise = Math.max(0, basicPaise - unpaidDeductionPaise)
-    + bonusPaise + overtimePaise + allowancesPaise;
+  const earnedPaise = Math.round(dailyRatePaise * attendanceHours / 8);
+  const grossPaise = earnedPaise + bonusPaise + allowancesPaise;
   const beforeAdvancePaise = Math.max(0, grossPaise - deductionsPaise);
 
   let remainingAdjustment = beforeAdvancePaise;
@@ -30,10 +22,7 @@ function calculateSalary({
   }
   const advanceAdjustmentPaise = advanceAllocations.reduce((sum, item) => sum + item.amountPaise, 0);
   return {
-    unpaidDays,
-    halfDays,
-    unpaidDayUnits,
-    unpaidDeductionPaise,
+    earnedPaise,
     grossPaise,
     advanceAdjustmentPaise,
     netPaise: beforeAdvancePaise - advanceAdjustmentPaise,

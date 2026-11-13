@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('payroll', Object.freeze({
     list: invoke('salaries:list'),
     payments: invoke('salaries:payments'),
     process: invoke('salaries:process'),
+    recalculateUnpaid: invoke('salaries:recalculate-unpaid'),
     pay: invoke('salaries:pay')
   }),
   settings: Object.freeze({

@@ -42,27 +42,29 @@ export default function Reports({ notify }) {
   }, [employeeId, from, notify, report, to]);
   React.useEffect(() => { load(); }, [load]);
   const headings = report === 'employees'
-    ? ['Employee ID', 'Employee', 'Designation', 'Department', 'Mobile', 'Status']
+    ? ['Employee ID', 'Labourer', 'Designation', 'Department', 'Mobile', 'Daily rate', 'Status']
     : report === 'salary'
-      ? ['Employee', 'Period start', 'Period end', 'Frequency', 'Net payable', 'Paid', 'Status']
+    ? ['Labourer', 'Period start', 'Period end', 'Hours worked', 'Net payable', 'Paid', 'Status']
       : report === 'advances'
         ? ['Transaction ID', 'Employee', 'Date', 'Method', 'Amount', 'Outstanding']
-        : ['Employee', 'Date', 'Status', 'Check-in', 'Check-out', 'Working hours'];
+        : ['Labourer', 'Date', 'Status', 'Hours worked'];
   const values = rows.map((row) => report === 'employees'
-    ? [row.employee_code, row.full_name, row.designation, row.department, row.mobile, row.status]
+    ? [row.employee_code, row.full_name, row.designation, row.department, row.mobile, rupees(row.daily_rate_paise), row.status]
     : report === 'salary'
-      ? [row.full_name, row.period_start, row.period_end, row.frequency, rupees(row.net_paise), rupees(row.paid_paise), row.status]
+      ? [row.full_name, row.period_start, row.period_end, JSON.parse(row.attendance_snapshot || '{}').attendanceHours ?? '—', rupees(row.net_paise), rupees(row.paid_paise), row.status]
       : report === 'advances'
         ? [row.transaction_id, row.full_name, row.payment_date, row.method, rupees(row.amount_paise), rupees(row.outstanding_paise)]
-        : [row.full_name, row.attendance_date, row.status, row.check_in, row.check_out, row.working_hours]);
+        : [row.full_name, row.attendance_date, row.status, row.working_hours]);
+  const reportName = report === 'salary' ? 'labour-bill' : report;
   const exportCsv = () => {
-    downloadCsv(`${report}-report-${from}-to-${to}.csv`, [headings, ...values]);
+    downloadCsv(`${reportName}-report-${from}-to-${to}.csv`, [headings, ...values]);
     notify('Excel-compatible CSV report downloaded');
   };
   const exportPdf = () => {
     const doc = new jsPDF({ orientation: headings.length > 5 ? 'landscape' : 'portrait' });
     doc.setFontSize(16);
-    doc.text(`Pratima Construction · ${report[0].toUpperCase()}${report.slice(1)} report`, 14, 17);
+    const reportTitle = report === 'salary' ? 'Labour bill' : `${report[0].toUpperCase()}${report.slice(1)}`;
+    doc.text(`Pratima Construction · ${reportTitle} report`, 14, 17);
     doc.setFontSize(9);
     doc.text(`${prettyDate(from)} – ${prettyDate(to)} · ${rows.length} records`, 14, 24);
     const margin = 14;
@@ -79,11 +81,11 @@ export default function Reports({ notify }) {
     };
     drawRow(headings, true);
     values.forEach((row) => drawRow(row));
-    doc.save(`${report}-report-${from}-to-${to}.pdf`);
+    doc.save(`${reportName}-report-${from}-to-${to}.pdf`);
     notify('PDF report saved');
   };
   return <>
-    <ScreenHeader title="Reports" subtitle="Filter employee, attendance, salary and advance payment records for export." />
+    <ScreenHeader title="Reports" subtitle="Filter labour, attendance, wage bills and advance payment records for export." />
     <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
       <Stack direction={{ xs: 'column', lg: 'row' }} alignItems={{ lg: 'center' }} spacing={1.5} sx={{ p: 2 }}>
         <TextField select size="small" label="Report type" value={report} onChange={(event) => {
@@ -94,7 +96,7 @@ export default function Reports({ notify }) {
         }} sx={{ minWidth: 200 }}>
           <MenuItem value="employees">Employee list</MenuItem><MenuItem value="attendance_daily">Daily attendance</MenuItem>
           <MenuItem value="attendance_monthly">Monthly attendance</MenuItem><MenuItem value="attendance_employee">Employee-wise attendance</MenuItem>
-          <MenuItem value="salary">Salary report</MenuItem><MenuItem value="advances">Advance payments</MenuItem>
+          <MenuItem value="salary">Labour bill report</MenuItem><MenuItem value="advances">Advance payments</MenuItem>
         </TextField>
         {report !== 'employees' && <>
           <TextField size="small" label="From" type="date" InputLabelProps={{ shrink: true }} value={from} onChange={(event) => setFrom(event.target.value)} />

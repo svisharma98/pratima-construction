@@ -6,9 +6,9 @@ import {
 import { SaveOutlined } from '@mui/icons-material';
 import ScreenHeader from '../components/ScreenHeader.jsx';
 import StatusChip from '../components/StatusChip.jsx';
-import { prettyDate, today } from '../lib/format.js';
+import { prettyDate, rupees, today } from '../lib/format.js';
 
-const statuses = ['Present', 'Absent', 'Half Day', 'Paid Leave', 'Unpaid Leave', 'Weekly Off'];
+const statuses = ['Present', 'Absent'];
 const monthDates = (value) => {
   const [year, month] = value.split('-').map(Number);
   const first = new Date(year, month - 1, 1);
@@ -35,7 +35,9 @@ export default function Attendance({ notify }) {
         const found = attendance.find((row) => row.employee_id === employee.id);
         return {
           employee_id: employee.id, full_name: employee.full_name, employee_code: employee.employee_code,
-          status: found?.status || 'Present', check_in: found?.check_in || '', check_out: found?.check_out || '',
+          daily_rate_paise: employee.daily_rate_paise,
+          status: found?.status || 'Present',
+          working_hours: found?.working_hours ?? (found?.status === 'Absent' ? 0 : 8),
           remarks: found?.remarks || ''
         };
       }));
@@ -55,12 +57,15 @@ export default function Attendance({ notify }) {
   React.useEffect(() => { loadMonth(); }, [loadMonth]);
 
   const changeRow = (id, field, value) => setRows((current) => current.map((row) => row.employee_id === id ? { ...row, [field]: value } : row));
+  const changeStatus = (id, status) => setRows((current) => current.map((row) => row.employee_id === id
+    ? { ...row, status, working_hours: status === 'Absent' ? 0 : row.working_hours || 8 }
+    : row));
   const save = async (row) => {
     setSavingId(row.employee_id);
     try {
       await window.payroll.attendance.save({
         employee_id: row.employee_id, attendance_date: date, status: row.status,
-        check_in: row.check_in, check_out: row.check_out, remarks: row.remarks
+        working_hours: Number(row.working_hours), remarks: row.remarks
       });
       notify(`Attendance saved for ${row.full_name}`);
       loadMonth();
@@ -72,7 +77,7 @@ export default function Attendance({ notify }) {
   const employeeName = employees.find((item) => item.id === Number(selectedEmployee))?.full_name;
 
   return <>
-    <ScreenHeader title="Attendance" subtitle="Record daily attendance and review employee attendance history." />
+    <ScreenHeader title="Daily attendance" subtitle="Mark labour present or absent and enter the actual hours worked. A present day defaults to 8 hours." />
     <Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider', mb: 3 }}>
       <CardContent sx={{ p: 2.5 }}>
         <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'center' }} spacing={2} sx={{ mb: 2 }}>
@@ -80,18 +85,17 @@ export default function Attendance({ notify }) {
           <TextField size="small" label="Attendance date" type="date" InputLabelProps={{ shrink: true }} value={date} onChange={(event) => setDate(event.target.value)} />
         </Stack>
         <Box className="page-table-wrap"><Table>
-          <TableHead><TableRow><TableCell>Employee</TableCell><TableCell>Status</TableCell><TableCell>Check in</TableCell><TableCell>Check out</TableCell><TableCell>Remarks</TableCell><TableCell align="right">Save</TableCell></TableRow></TableHead>
+          <TableHead><TableRow><TableCell>Labourer / daily rate</TableCell><TableCell>Status</TableCell><TableCell>Hours worked</TableCell><TableCell>Remarks</TableCell><TableCell align="right">Save</TableCell></TableRow></TableHead>
           <TableBody>{rows.map((row) => <TableRow key={row.employee_id}>
-            <TableCell><Typography variant="body2" fontWeight={650}>{row.full_name}</Typography><Typography variant="caption" color="text.secondary">{row.employee_code}</Typography></TableCell>
-            <TableCell><TextField select size="small" value={row.status} onChange={(event) => changeRow(row.employee_id, 'status', event.target.value)} sx={{ minWidth: 140 }}>
+            <TableCell><Typography variant="body2" fontWeight={650}>{row.full_name}</Typography><Typography variant="caption" color="text.secondary">{row.employee_code} · {rupees(row.daily_rate_paise)}/day</Typography></TableCell>
+            <TableCell><TextField select size="small" value={row.status} onChange={(event) => changeStatus(row.employee_id, event.target.value)} sx={{ minWidth: 120 }}>
               {statuses.map((status) => <MenuItem key={status} value={status}>{status}</MenuItem>)}
             </TextField></TableCell>
-            <TableCell><TextField size="small" type="time" value={row.check_in} onChange={(event) => changeRow(row.employee_id, 'check_in', event.target.value)} /></TableCell>
-            <TableCell><TextField size="small" type="time" value={row.check_out} onChange={(event) => changeRow(row.employee_id, 'check_out', event.target.value)} /></TableCell>
+            <TableCell><TextField size="small" type="number" inputProps={{ min: 0, max: 24, step: 0.25 }} disabled={row.status === 'Absent'} value={row.working_hours} onChange={(event) => changeRow(row.employee_id, 'working_hours', event.target.value)} sx={{ width: 110 }} /></TableCell>
             <TableCell><TextField size="small" placeholder="Optional" value={row.remarks} onChange={(event) => changeRow(row.employee_id, 'remarks', event.target.value)} /></TableCell>
             <TableCell align="right"><Button size="small" variant="contained" startIcon={<SaveOutlined />} disabled={savingId === row.employee_id} onClick={() => save(row)}>{savingId === row.employee_id ? 'Saving' : 'Save'}</Button></TableCell>
           </TableRow>)}
-          {!rows.length && <TableRow><TableCell colSpan={6}><Typography textAlign="center" color="text.secondary" sx={{ py: 4 }}>No active employees. Add an employee to record attendance.</Typography></TableCell></TableRow>}
+          {!rows.length && <TableRow><TableCell colSpan={5}><Typography textAlign="center" color="text.secondary" sx={{ py: 4 }}>No active labourers. Add one to record attendance.</Typography></TableCell></TableRow>}
           </TableBody>
         </Table></Box>
       </CardContent>
@@ -111,9 +115,9 @@ export default function Attendance({ notify }) {
           {Array.from({ length: days }, (_value, index) => {
             const day = index + 1;
             const record = monthMap.get(day);
-            return <Paper key={day} variant="outlined" sx={{ minHeight: 76, p: 1, bgcolor: record?.status === 'Present' ? 'rgba(22,138,99,.08)' : record?.status === 'Absent' || record?.status === 'Unpaid Leave' ? 'rgba(211,47,47,.08)' : 'background.paper' }}>
+            return <Paper key={day} variant="outlined" sx={{ minHeight: 76, p: 1, bgcolor: record?.status === 'Present' ? 'rgba(22,138,99,.08)' : record?.status === 'Absent' ? 'rgba(211,47,47,.08)' : 'background.paper' }}>
               <Typography variant="body2" fontWeight={650}>{day}</Typography>
-              {record ? <><StatusChip status={record.status} /><Typography variant="caption" display="block" color="text.secondary">{prettyDate(record.attendance_date)}</Typography></> : <Typography variant="caption" color="text.disabled">No record</Typography>}
+              {record ? <><StatusChip status={record.status} /><Typography variant="caption" display="block" color="text.secondary">{record.working_hours} hours</Typography></> : <Typography variant="caption" color="text.disabled">No record</Typography>}
             </Paper>;
           })}
         </Box> : <Typography color="text.secondary" sx={{ py: 6, textAlign: 'center' }}>Select an employee to view their monthly attendance calendar.</Typography>}

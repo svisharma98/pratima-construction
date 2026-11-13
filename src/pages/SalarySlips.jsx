@@ -11,6 +11,8 @@ const pdfMoney = (paise) => `INR ${(Math.abs(Number(paise) || 0) / 100).toLocale
 function makeSlip(record, company) {
   const doc = new jsPDF();
   const left = 18;
+  const attendance = JSON.parse(record.attendance_snapshot || '{}');
+  const isLabourBill = Number.isFinite(attendance.earnedPaise);
   doc.setFillColor(36, 87, 197);
   doc.rect(0, 0, 210, 38, 'F');
   doc.setTextColor(255, 255, 255);
@@ -23,18 +25,21 @@ function makeSlip(record, company) {
   doc.text(company.company_name || 'Pratima Construction', company.company_logo_data ? left + 16 : left, 17);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.text(company.company_address || 'Salary statement', left, 25);
+  doc.text(company.company_address || (isLabourBill ? 'Labour bill' : 'Salary statement'), left, 25);
   doc.text(company.contact || '', left, 31);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);
-  doc.text('SALARY SLIP', 192, 22, { align: 'right' });
+  doc.text(isLabourBill ? 'WAGE STATEMENT' : 'SALARY SLIP', 192, 22, { align: 'right' });
 
   doc.setTextColor(35, 42, 55);
   doc.setFontSize(10);
   const y0 = 53;
   const fields = [
     ['Employee name', record.full_name], ['Employee ID', record.employee_code],
-    ['Designation', record.designation || '—'], ['Salary frequency', record.frequency],
+    ['Designation', record.designation || '—'],
+    ...(isLabourBill
+      ? [['Daily rate (8 hours)', pdfMoney(record.basic_paise)]]
+      : [['Salary frequency', record.frequency]]),
     ['Period start', prettyDate(record.period_start)], ['Period end', prettyDate(record.period_end)],
     ['Payment date', record.payment_date ? prettyDate(record.payment_date) : 'Pending']
   ];
@@ -49,16 +54,16 @@ function makeSlip(record, company) {
     doc.text(String(value || '—'), columnX, lineY + 5);
   });
 
-  const attendance = JSON.parse(record.attendance_snapshot || '{}');
   const rows = [
-    ['Basic salary', record.basic_paise],
-    ['Unpaid leave deduction', -record.unpaid_deduction_paise],
+    ...(isLabourBill
+      ? [[`Wages for ${attendance.attendanceHours || 0} hours`, attendance.earnedPaise]]
+      : [['Basic salary', record.basic_paise], ['Unpaid leave deduction', -record.unpaid_deduction_paise]]),
     ['Bonus', record.bonus_paise],
-    ['Overtime', record.overtime_paise],
+    ...(!isLabourBill ? [['Overtime', record.overtime_paise]] : []),
     ['Allowances', record.allowances_paise],
     ['Other deductions', -record.deductions_paise],
     ['Advance adjustment', -record.advance_adjustment_paise],
-    ['Gross salary', record.gross_paise],
+    [isLabourBill ? 'Gross wages' : 'Gross salary', record.gross_paise],
     ['Net payable', record.net_paise],
     ['Amount paid', record.paid_paise],
     ['Remaining balance', record.net_paise - record.paid_paise]
@@ -83,12 +88,15 @@ function makeSlip(record, company) {
   doc.setFont('helvetica', 'bold');
   doc.text('Attendance summary', left, y);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Present: ${attendance.Present || 0}   Half day: ${attendance['Half Day'] || 0}   Paid leave: ${attendance['Paid Leave'] || 0}   Unpaid days: ${attendance.unpaidDays || 0}`, left, y + 7);
+  doc.text(isLabourBill
+    ? `Present days: ${attendance.Present || 0}   Absent days: ${attendance.Absent || 0}   Worked hours: ${attendance.attendanceHours || 0}`
+    : `Present: ${attendance.Present || 0}   Half day: ${attendance['Half Day'] || 0}   Paid leave: ${attendance['Paid Leave'] || 0}   Unpaid days: ${attendance.unpaidDays || 0}`,
+  left, y + 7);
   doc.text(`Payment status: ${record.status}`, left, y + 15);
   doc.setTextColor(125, 132, 145);
   doc.setFontSize(8);
-  doc.text('This is a computer-generated salary slip.', left, 285);
-  const filename = `Salary-Slip-${record.employee_code}-${record.period_start}.pdf`;
+  doc.text(`This is a computer-generated ${isLabourBill ? 'wage statement' : 'salary slip'}.`, left, 285);
+  const filename = `${isLabourBill ? 'Wage-Statement' : 'Salary-Slip'}-${record.employee_code}-${record.period_start}.pdf`;
   return { doc, filename };
 }
 
@@ -125,10 +133,10 @@ export default function SalarySlips() {
   }, []);
   const filtered = records.filter((row) => `${row.full_name} ${row.employee_code} ${row.period_start}`.toLowerCase().includes(search.toLowerCase()));
   return <>
-    <ScreenHeader title="Salary slips" subtitle="Search processed salary history and save a detailed PDF salary slip." />
+    <ScreenHeader title="Salary slips / wage statements" subtitle="Find a processed labour bill, then save or print its salary slip." />
     <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
       <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'center' }} justifyContent="space-between" spacing={2} sx={{ p: 2 }}>
-        <Typography fontWeight={700}>Previous salary slips</Typography>
+        <Typography fontWeight={700}>Previous wage statements</Typography>
         <TextField size="small" placeholder="Search employee or period" value={search} onChange={(event) => setSearch(event.target.value)} />
       </Stack>
       {error && <Typography color="error" sx={{ px: 2 }}>{error}</Typography>}
@@ -143,7 +151,7 @@ export default function SalarySlips() {
             <Button size="small" onClick={() => printSlip(row, company)}>Print</Button>
           </Stack></TableCell>
         </TableRow>)}
-          {!filtered.length && <TableRow><TableCell colSpan={7}><Typography color="text.secondary" textAlign="center" sx={{ py: 5 }}>Salary slips will appear here after payroll is processed.</Typography></TableCell></TableRow>}
+          {!filtered.length && <TableRow><TableCell colSpan={7}><Typography color="text.secondary" textAlign="center" sx={{ py: 5 }}>Wage statements will appear here after a labour bill is processed.</Typography></TableCell></TableRow>}
         </TableBody>
       </Table></Box>
     </Paper>

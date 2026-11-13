@@ -46,6 +46,7 @@ const schema = `
     payment_frequency TEXT NOT NULL CHECK(payment_frequency IN ('Weekly','Monthly')),
     salary_start_date TEXT NOT NULL,
     working_days INTEGER NOT NULL DEFAULT 26 CHECK(working_days > 0),
+    daily_rate_review_required INTEGER NOT NULL DEFAULT 0 CHECK(daily_rate_review_required IN (0,1)),
     weekly_off_days TEXT NOT NULL DEFAULT 'Sunday',
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
@@ -179,6 +180,12 @@ function openDatabase(databasePath) {
     instance.exec('ALTER TABLE employees ADD COLUMN profile_photo_data TEXT');
   }
   instance.prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(2)').run();
+  const salaryStructureColumns = new Set(instance.pragma('table_info(salary_structures)').map((column) => column.name));
+  if (!salaryStructureColumns.has('daily_rate_review_required')) {
+    instance.exec(`ALTER TABLE salary_structures ADD COLUMN daily_rate_review_required
+      INTEGER NOT NULL DEFAULT 1 CHECK(daily_rate_review_required IN (0,1))`);
+  }
+  instance.prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(3)').run();
   instance.prepare(`INSERT INTO company_settings(key,value) VALUES('company_name','Pratima Construction')
     ON CONFLICT(key) DO NOTHING`).run();
   return instance;
@@ -240,9 +247,10 @@ function registerHandlers() {
       WHERE period_start >= date('now','-5 months','start of month')
       GROUP BY month ORDER BY month`).all();
     const attendanceTrend = db.prepare(`SELECT substr(attendance_date,1,7) AS month,
-      ROUND(100.0 * SUM(CASE WHEN status IN ('Present','Half Day','Paid Leave') THEN 1 ELSE 0 END)
-      / NULLIF(COUNT(*),0),1) AS percentage
+      ROUND(100.0 * SUM(CASE WHEN status IN ('Present','Half Day') THEN 1 ELSE 0 END)
+      / NULLIF(SUM(CASE WHEN status IN ('Present','Half Day','Absent') THEN 1 ELSE 0 END),0),1) AS percentage
       FROM attendance WHERE attendance_date >= date('now','-5 months','start of month')
+      AND status IN ('Present','Half Day','Absent')
       GROUP BY month ORDER BY month`).all();
     const recentSalaries = db.prepare(`SELECT s.transaction_id, e.full_name, s.period_start,
       s.period_end, s.net_paise, s.status FROM salary_records s JOIN employees e ON e.id=s.employee_id
@@ -261,8 +269,9 @@ function registerHandlers() {
       search: z.string().max(120).optional().default(''),
       status: z.enum(['All', 'Active', 'Inactive']).optional().default('All')
     }).parse(query || {});
-    return db.prepare(`SELECT e.*, d.name AS department, ss.basic_salary_paise,
-      ss.payment_frequency, ss.working_days FROM employees e
+    return db.prepare(`SELECT e.*, d.name AS department,
+      ss.basic_salary_paise AS daily_rate_paise,
+      ss.daily_rate_review_required AS daily_rate_needs_review FROM employees e
       LEFT JOIN departments d ON d.id=e.department_id
       LEFT JOIN salary_structures ss ON ss.employee_id=e.id
       WHERE (?='All' OR e.status=?) AND
@@ -286,9 +295,7 @@ function registerHandlers() {
       emergency_contact: z.string().max(100).optional().default(''),
       bank_details: z.string().max(300).optional().default(''),
       profile_photo_data: z.string().max(8_000_000).optional().default(''),
-      basic_salary_paise: nonNegativeInt,
-      payment_frequency: z.enum(['Weekly', 'Monthly']),
-      working_days: z.number().int().min(1).max(31).default(26)
+      daily_rate_paise: positiveInt
     }).parse(input);
     const save = db.transaction(() => {
       let departmentId = null;
@@ -313,11 +320,11 @@ function registerHandlers() {
         id = result.lastInsertRowid;
       }
       db.prepare(`INSERT INTO salary_structures(employee_id,basic_salary_paise,payment_frequency,
-        salary_start_date,working_days) VALUES(?,?,?,?,?)
+        salary_start_date,working_days,daily_rate_review_required) VALUES(?,?,'Monthly',?,26,0)
         ON CONFLICT(employee_id) DO UPDATE SET basic_salary_paise=excluded.basic_salary_paise,
-        payment_frequency=excluded.payment_frequency,salary_start_date=excluded.salary_start_date,
-        working_days=excluded.working_days,updated_at=CURRENT_TIMESTAMP`)
-        .run(id, data.basic_salary_paise, data.payment_frequency, data.joining_date, data.working_days);
+        salary_start_date=excluded.salary_start_date,daily_rate_review_required=0,
+        updated_at=CURRENT_TIMESTAMP`)
+        .run(id, data.daily_rate_paise, data.joining_date);
       logActivity(data.id ? 'Employee updated' : 'Employee created', 'Employee', id, data.full_name);
       return db.prepare('SELECT employee_code FROM employees WHERE id=?').get(id).employee_code;
     });
@@ -353,7 +360,16 @@ function registerHandlers() {
       employee_id: positiveInt.optional()
     }).parse(query || {});
     const date = q.date || q.from || localDate();
-    return db.prepare(`SELECT a.*,e.employee_code,e.full_name,e.designation FROM attendance a
+    return db.prepare(`SELECT a.id,a.employee_id,a.attendance_date,a.check_in,a.check_out,
+      CASE
+        WHEN a.status='Present' AND a.working_hours<=0 THEN 8
+        WHEN a.status='Half Day' AND a.working_hours<=0 THEN 4
+        WHEN a.status IN ('Absent','Unpaid Leave','Paid Leave','Weekly Off') THEN 0
+        ELSE a.working_hours
+      END AS working_hours,
+      CASE WHEN a.status IN ('Present','Half Day') THEN 'Present' ELSE 'Absent' END AS status,
+      a.remarks,a.created_at,a.updated_at,e.employee_code,e.full_name,e.designation
+      FROM attendance a
       JOIN employees e ON e.id=a.employee_id
       WHERE (? IS NULL OR a.employee_id=?) AND a.attendance_date BETWEEN ? AND ?
       ORDER BY e.full_name`).all(q.employee_id || null, q.employee_id || null,
@@ -364,20 +380,18 @@ function registerHandlers() {
     const data = z.object({
       employee_id: positiveInt,
       attendance_date: dateSchema,
-      check_in: z.string().regex(/^$|^([01]\d|2[0-3]):[0-5]\d$/).optional().default(''),
-      check_out: z.string().regex(/^$|^([01]\d|2[0-3]):[0-5]\d$/).optional().default(''),
-      status: z.enum(['Present', 'Absent', 'Half Day', 'Paid Leave', 'Unpaid Leave', 'Weekly Off']),
+      working_hours: z.number().min(0).max(24).optional(),
+      status: z.enum(['Present', 'Absent']),
       remarks: z.string().max(300).optional().default('')
     }).parse(input);
-    const hours = data.check_in && data.check_out
-      ? Math.max(0, (new Date(`1970-01-01T${data.check_out}:00`) - new Date(`1970-01-01T${data.check_in}:00`)) / 3600000)
-      : 0;
+    const hours = data.status === 'Absent' ? 0 : data.working_hours ?? 8;
+    if (data.status === 'Present' && hours <= 0) throw new Error('Present attendance must include more than 0 working hours');
     const result = db.prepare(`INSERT INTO attendance(employee_id,attendance_date,check_in,check_out,
       working_hours,status,remarks) VALUES(?,?,?,?,?,?,?)
       ON CONFLICT(employee_id,attendance_date) DO UPDATE SET check_in=excluded.check_in,
       check_out=excluded.check_out,working_hours=excluded.working_hours,status=excluded.status,
       remarks=excluded.remarks,updated_at=CURRENT_TIMESTAMP`)
-      .run(data.employee_id, data.attendance_date, data.check_in, data.check_out, hours,
+      .run(data.employee_id, data.attendance_date, '', '', hours,
         data.status, data.remarks);
     logActivity('Attendance saved', 'Attendance', result.lastInsertRowid, `${data.attendance_date} · ${data.status}`);
     return true;
@@ -448,9 +462,9 @@ function registerHandlers() {
       JOIN advance_payments a ON a.id=m.advance_payment_id
       JOIN employees e ON e.id=a.employee_id
     UNION ALL
-    SELECT s.transaction_id,'Salary adjustment' AS type,a.employee_id,e.full_name,
-      s.created_at AS adjustment_date,'Applied to salary' AS direction,s.amount_paise,
-      'Salary record ' || r.transaction_id AS reason
+    SELECT s.transaction_id,'Labour bill adjustment' AS type,a.employee_id,e.full_name,
+      s.created_at AS adjustment_date,'Deducted from labour bill' AS direction,s.amount_paise,
+      'Labour bill ' || r.transaction_id AS reason
       FROM salary_adjustments s
       JOIN advance_payments a ON a.id=s.advance_payment_id
       JOIN employees e ON e.id=a.employee_id
@@ -459,8 +473,10 @@ function registerHandlers() {
   `).all());
 
   ipcMain.handle('salaries:list', () => db.prepare(`SELECT s.*,e.employee_code,e.full_name,
-    e.designation,(SELECT MAX(payment_date) FROM salary_payments p WHERE p.salary_record_id=s.id) AS payment_date
+    e.designation,ss.basic_salary_paise AS current_daily_rate_paise,
+    (SELECT MAX(payment_date) FROM salary_payments p WHERE p.salary_record_id=s.id) AS payment_date
     FROM salary_records s JOIN employees e ON e.id=s.employee_id
+    JOIN salary_structures ss ON ss.employee_id=e.id
     ORDER BY s.period_start DESC,s.id DESC`).all());
   ipcMain.handle('salaries:payments', (_event, input) => {
     const { salary_record_id } = z.object({ salary_record_id: positiveInt }).parse(input);
@@ -474,38 +490,44 @@ function registerHandlers() {
       period_start: dateSchema,
       period_end: dateSchema,
       bonus_paise: nonNegativeInt.default(0),
-      overtime_paise: nonNegativeInt.default(0),
       allowances_paise: nonNegativeInt.default(0),
       deductions_paise: nonNegativeInt.default(0)
     }).parse(input);
-    if (data.period_end < data.period_start) throw new Error('Salary period end must be after its start');
+    if (data.period_end < data.period_start) throw new Error('Bill period end must be after its start');
     const process = db.transaction(() => {
-      const employee = db.prepare(`SELECT e.full_name,ss.* FROM employees e
+      const employee = db.prepare(`SELECT e.full_name,e.joining_date,ss.* FROM employees e
         JOIN salary_structures ss ON ss.employee_id=e.id WHERE e.id=?`).get(data.employee_id);
       if (!employee) throw new Error('Employee salary structure not found');
-      if (data.period_start < employee.salary_start_date) throw new Error('Salary period starts before the employee salary start date');
+      if (employee.daily_rate_review_required) throw new Error("Review and save this labourer's daily rate before processing a bill");
+      if (employee.basic_salary_paise <= 0) throw new Error("Set this labourer's daily rate in the Labourers page before processing a bill");
+      if (data.period_start < employee.salary_start_date) throw new Error("Bill period starts before the labourer's joining date");
       const overlap = db.prepare(`SELECT transaction_id FROM salary_records
         WHERE employee_id=? AND period_start<=? AND period_end>=? LIMIT 1`)
         .get(data.employee_id, data.period_end, data.period_start);
-      if (overlap) throw new Error(`Salary period overlaps an existing record (${overlap.transaction_id})`);
-      if (employee.payment_frequency === 'Weekly') {
-        const periodDays = (Date.parse(`${data.period_end}T00:00:00Z`) - Date.parse(`${data.period_start}T00:00:00Z`)) / 86400000 + 1;
-        if (periodDays !== 7) throw new Error('Weekly salary periods must contain exactly 7 days');
-      }
-      const attendanceRows = db.prepare(`SELECT status,COUNT(*) AS days FROM attendance
-        WHERE employee_id=? AND attendance_date BETWEEN ? AND ? GROUP BY status`)
+      if (overlap) throw new Error(`Bill period overlaps an existing record (${overlap.transaction_id})`);
+      const attendanceRows = db.prepare(`SELECT
+        CASE WHEN status IN ('Present','Half Day') THEN 'Present' ELSE 'Absent' END AS status,
+        attendance_date,
+        CASE
+          WHEN status='Present' AND working_hours<=0 THEN 8
+          WHEN status='Half Day' AND working_hours<=0 THEN 4
+          WHEN status IN ('Absent','Unpaid Leave','Paid Leave','Weekly Off') THEN 0
+          ELSE working_hours
+        END AS working_hours
+        FROM attendance
+        WHERE employee_id=? AND attendance_date BETWEEN ? AND ?`)
         .all(data.employee_id, data.period_start, data.period_end);
-      const days = Object.fromEntries(attendanceRows.map((row) => [row.status, row.days]));
+      const attendanceCounts = Object.fromEntries(
+        attendanceRows.reduce((counts, row) => counts.set(row.status, (counts.get(row.status) || 0) + 1), new Map())
+      );
+      const attendanceHours = attendanceRows.reduce((sum, row) => sum + row.working_hours, 0);
       const eligibleAdvances = db.prepare(`SELECT id,outstanding_paise FROM advance_payments
         WHERE employee_id=? AND outstanding_paise>0 AND payment_date<=?
         ORDER BY payment_date,id`).all(data.employee_id, data.period_end);
       const calculation = calculateSalary({
-        basicPaise: employee.basic_salary_paise,
-        paymentFrequency: employee.payment_frequency,
-        workingDays: employee.working_days,
-        attendanceCounts: days,
+        dailyRatePaise: employee.basic_salary_paise,
+        attendanceHours,
         bonusPaise: data.bonus_paise,
-        overtimePaise: data.overtime_paise,
         allowancesPaise: data.allowances_paise,
         deductionsPaise: data.deductions_paise,
         advances: eligibleAdvances
@@ -515,10 +537,10 @@ function registerHandlers() {
         period_end,frequency,basic_paise,bonus_paise,overtime_paise,allowances_paise,deductions_paise,
         unpaid_deduction_paise,advance_adjustment_paise,gross_paise,net_paise,attendance_snapshot)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(idempotencyId, data.employee_id, data.period_start,
-        data.period_end, employee.payment_frequency, employee.basic_salary_paise, data.bonus_paise,
-        data.overtime_paise, data.allowances_paise, data.deductions_paise, calculation.unpaidDeductionPaise,
+        data.period_end, 'Monthly', employee.basic_salary_paise, data.bonus_paise,
+        0, data.allowances_paise, data.deductions_paise, 0,
         calculation.advanceAdjustmentPaise, calculation.grossPaise, calculation.netPaise,
-        JSON.stringify({ ...days, unpaidDays: calculation.unpaidDays, unpaidDayUnits: calculation.unpaidDayUnits }));
+        JSON.stringify({ ...attendanceCounts, attendanceHours, earnedPaise: calculation.earnedPaise }));
       for (const allocation of calculation.advanceAllocations) {
         db.prepare(`INSERT INTO salary_adjustments(transaction_id,salary_record_id,advance_payment_id,amount_paise)
           VALUES(?,?,?,?)`).run(createTransactionId('ADJ'),
@@ -526,11 +548,84 @@ function registerHandlers() {
         db.prepare('UPDATE advance_payments SET outstanding_paise=outstanding_paise-? WHERE id=?')
           .run(allocation.amountPaise, allocation.id);
       }
-      logActivity('Salary processed', 'Salary', record.lastInsertRowid, `${data.period_start} to ${data.period_end}`);
+      logActivity('Labour bill processed', 'Labour bill', record.lastInsertRowid, `${data.period_start} to ${data.period_end}`);
       return db.prepare(`SELECT s.*,e.employee_code,e.full_name,e.designation FROM salary_records s
         JOIN employees e ON e.id=s.employee_id WHERE s.id=?`).get(record.lastInsertRowid);
     });
     return process();
+  });
+
+  ipcMain.handle('salaries:recalculate-unpaid', (_event, input) => {
+    const { salary_record_id } = z.object({ salary_record_id: positiveInt }).parse(input);
+    const recalculate = db.transaction(() => {
+      const salary = db.prepare('SELECT * FROM salary_records WHERE id=?').get(salary_record_id);
+      if (!salary) throw new Error('Labour bill not found');
+      if (salary.paid_paise > 0) throw new Error('A bill with recorded payments cannot be recalculated');
+      const priorSnapshot = JSON.parse(salary.attendance_snapshot || '{}');
+      if (salary.net_paise !== 0 || (priorSnapshot.attendanceHours || 0) <= 0) {
+        throw new Error('Only zero-amount bills with recorded working hours can be recalculated');
+      }
+
+      const employee = db.prepare(`SELECT e.full_name,e.joining_date,ss.* FROM employees e
+        JOIN salary_structures ss ON ss.employee_id=e.id WHERE e.id=?`).get(salary.employee_id);
+      if (!employee) throw new Error('Employee salary structure not found');
+      if (employee.daily_rate_review_required) throw new Error("Review and save this labourer's daily rate before recalculating");
+      if (employee.basic_salary_paise <= 0) throw new Error("Set this labourer's daily rate in the Labourers page before recalculating");
+
+      const attendanceRows = db.prepare(`SELECT
+        CASE WHEN status IN ('Present','Half Day') THEN 'Present' ELSE 'Absent' END AS status,
+        attendance_date,
+        CASE
+          WHEN status='Present' AND working_hours<=0 THEN 8
+          WHEN status='Half Day' AND working_hours<=0 THEN 4
+          WHEN status IN ('Absent','Unpaid Leave','Paid Leave','Weekly Off') THEN 0
+          ELSE working_hours
+        END AS working_hours
+        FROM attendance
+        WHERE employee_id=? AND attendance_date BETWEEN ? AND ?`)
+        .all(salary.employee_id, salary.period_start, salary.period_end);
+      const attendanceCounts = Object.fromEntries(
+        attendanceRows.reduce((counts, row) => counts.set(row.status, (counts.get(row.status) || 0) + 1), new Map())
+      );
+      const attendanceHours = attendanceRows.reduce((sum, row) => sum + row.working_hours, 0);
+      if (attendanceHours <= 0) throw new Error('No working hours were found for this bill period');
+
+      const previousAllocations = db.prepare(`SELECT advance_payment_id,amount_paise
+        FROM salary_adjustments WHERE salary_record_id=?`).all(salary.id);
+      for (const allocation of previousAllocations) {
+        db.prepare('UPDATE advance_payments SET outstanding_paise=outstanding_paise+? WHERE id=?')
+          .run(allocation.amount_paise, allocation.advance_payment_id);
+      }
+      db.prepare('DELETE FROM salary_adjustments WHERE salary_record_id=?').run(salary.id);
+      const eligibleAdvances = db.prepare(`SELECT id,outstanding_paise FROM advance_payments
+        WHERE employee_id=? AND outstanding_paise>0 AND payment_date<=?
+        ORDER BY payment_date,id`).all(salary.employee_id, salary.period_end);
+      const calculation = calculateSalary({
+        dailyRatePaise: employee.basic_salary_paise,
+        attendanceHours,
+        bonusPaise: salary.bonus_paise,
+        allowancesPaise: salary.allowances_paise,
+        deductionsPaise: salary.deductions_paise,
+        advances: eligibleAdvances
+      });
+
+      db.prepare(`UPDATE salary_records SET basic_paise=?,advance_adjustment_paise=?,gross_paise=?,
+        net_paise=?,attendance_snapshot=? WHERE id=?`)
+        .run(employee.basic_salary_paise, calculation.advanceAdjustmentPaise,
+          calculation.grossPaise, calculation.netPaise,
+          JSON.stringify({ ...attendanceCounts, attendanceHours, earnedPaise: calculation.earnedPaise }),
+          salary.id);
+      for (const allocation of calculation.advanceAllocations) {
+        db.prepare(`INSERT INTO salary_adjustments(transaction_id,salary_record_id,advance_payment_id,amount_paise)
+          VALUES(?,?,?,?)`).run(createTransactionId('ADJ'), salary.id, allocation.id, allocation.amountPaise);
+        db.prepare('UPDATE advance_payments SET outstanding_paise=outstanding_paise-? WHERE id=?')
+          .run(allocation.amountPaise, allocation.id);
+      }
+      logActivity('Unpaid labour bill recalculated', 'Labour bill', salary.id,
+        `Daily rate ${employee.basic_salary_paise} paise; ${attendanceHours} hours`);
+      return db.prepare('SELECT * FROM salary_records WHERE id=?').get(salary.id);
+    });
+    return recalculate();
   });
 
   ipcMain.handle('salaries:pay', (_event, input) => {
@@ -554,7 +649,7 @@ function registerHandlers() {
       const paid = salary.paid_paise + data.amount_paise;
       db.prepare('UPDATE salary_records SET paid_paise=?,status=? WHERE id=?')
         .run(paid, paid === salary.net_paise ? 'Paid' : 'Partially Paid', salary.id);
-      logActivity('Salary payment recorded', 'Salary', salary.id, `${data.amount_paise} paise`);
+      logActivity('Labour payment recorded', 'Labour bill', salary.id, `${data.amount_paise} paise`);
       return true;
     });
     return pay();

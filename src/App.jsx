@@ -22,8 +22,8 @@ const navigation = [
   { key: 'dashboard', title: 'Dashboard', icon: DashboardOutlined },
   { key: 'employees', title: 'Employees', icon: Groups2Outlined },
   { key: 'attendance', title: 'Attendance', icon: CalendarMonthOutlined },
-  { key: 'salaries', title: 'Salary Management', icon: PaymentsOutlined },
-  { key: 'advances', title: 'Advance Payments', icon: AccountBalanceWalletOutlined },
+  { key: 'salaries', title: 'Labour Billing', icon: PaymentsOutlined },
+  { key: 'advances', title: 'Weekly Payments', icon: AccountBalanceWalletOutlined },
   { key: 'slips', title: 'Salary Slips', icon: ReceiptLongOutlined },
   { key: 'reports', title: 'Reports', icon: AssessmentOutlined },
   { key: 'settings', title: 'Settings', icon: SettingsOutlined }
@@ -41,7 +41,7 @@ export default function App({ mode, setMode }) {
     dashboard: <Dashboard notify={notify} />,
     employees: <Employees notify={notify} />,
     attendance: <Attendance notify={notify} />,
-    salaries: <Salaries notify={notify} />,
+    salaries: <Salaries notify={notify} onOpenSlips={() => setActive('slips')} />,
     advances: <Advances notify={notify} />,
     slips: <SalarySlips />,
     reports: <Reports notify={notify} />,
@@ -51,7 +51,7 @@ export default function App({ mode, setMode }) {
   const sidebar = <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: 'background.paper' }}>
     <Box sx={{ px: 2.5, py: 2.4, display: 'flex', gap: 1.4, alignItems: 'center' }}>
       <Avatar variant="rounded" sx={{ bgcolor: 'primary.main', width: 42, height: 42 }}><ConstructionOutlined /></Avatar>
-      <Box><Typography fontWeight={750} fontSize={15}>Pratima Construction</Typography><Typography variant="caption" color="text.secondary">People & Payroll</Typography></Box>
+      <Box><Typography fontWeight={750} fontSize={15}>Pratima Construction</Typography><Typography variant="caption" color="text.secondary">Labour Billing</Typography></Box>
     </Box>
     <Divider sx={{ mx: 2 }} />
     <Typography variant="overline" color="text.secondary" sx={{ pl: 2.5, pt: 2.5, pb: 1, fontWeight: 700, letterSpacing: 1 }}>WORKSPACE</Typography>
