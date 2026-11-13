@@ -46,7 +46,8 @@
       "node_modules/better-sqlite3/**"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/pratima.ico"
     },
     "directories": {
       "output": "release"

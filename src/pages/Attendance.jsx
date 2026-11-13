@@ -1,12 +1,12 @@
 import React from 'react';
 import {
-  Avatar, Box, Button, Card, CardContent, Checkbox, Chip, Grid, IconButton, InputAdornment,
+  Box, Button, Card, CardContent, Checkbox, Chip, Grid, IconButton, InputAdornment,
   LinearProgress, MenuItem, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead,
-  TableRow, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography
+  TableRow, Tabs, Tab, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography
 } from '@mui/material';
 import {
-  AccessTimeOutlined, CheckCircleOutline, ChevronLeft, ChevronRight, EventAvailableOutlined,
-  PersonOffOutlined, SearchOutlined, SaveOutlined, TodayOutlined
+  AccessTimeOutlined, CheckCircleOutline, ChevronLeft, ChevronRight,
+  SearchOutlined, SaveOutlined, TodayOutlined
 } from '@mui/icons-material';
 import ScreenHeader from '../components/ScreenHeader.jsx';
 import StatusChip from '../components/StatusChip.jsx';
@@ -179,6 +179,7 @@ export default function Attendance({ notify }) {
   const estimatedWages = rows.reduce((sum, row) => sum + (row.status === 'Present'
     ? Math.round((row.daily_rate_paise || 0) * (Number(row.working_hours) || 0) / 8)
     : 0), 0);
+  const maxAttendanceDate = today();
   const displayDate = new Intl.DateTimeFormat('en-IN', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
   }).format(new Date(`${date}T00:00:00`));
@@ -187,19 +188,26 @@ export default function Attendance({ notify }) {
     <ScreenHeader title="Daily attendance" subtitle="Mark labour present or absent and enter the actual hours worked. A present day defaults to 8 hours." />
     <Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider', mb: 3, overflow: 'hidden' }}>
       <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ md: 'center' }} spacing={2}
-        sx={{ px: { xs: 2, md: 2.5 }, py: 2, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <Avatar variant="rounded" sx={{ width: 42, height: 42, bgcolor: 'primary.light', color: 'primary.main' }}><EventAvailableOutlined /></Avatar>
-          <Box>
-            <Typography fontWeight={700}>Attendance register</Typography>
-            <Typography variant="body2" color="text.secondary">{displayDate}</Typography>
-          </Box>
-        </Stack>
+        sx={{ px: { xs: 2, md: 2.5 }, py: 1.75, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>
+        <Box>
+          <Typography variant="caption" color="text.secondary" fontWeight={700}>ATTENDANCE REGISTER</Typography>
+          <Typography variant="body2" fontWeight={600}>{displayDate}</Typography>
+        </Box>
         <Stack direction="row" spacing={0.75} alignItems="center">
           <Tooltip title="Previous day"><span><IconButton size="small" aria-label="Previous day" disabled={savingAll} onClick={() => setDate((value) => moveDate(value, -1))}><ChevronLeft /></IconButton></span></Tooltip>
-          <TextField size="small" type="date" value={date} onChange={(event) => setDate(event.target.value)}
-            inputProps={{ 'aria-label': 'Attendance date' }} disabled={savingAll} sx={{ width: 165 }} />
-          <Tooltip title="Next day"><span><IconButton size="small" aria-label="Next day" disabled={savingAll} onClick={() => setDate((value) => moveDate(value, 1))}><ChevronRight /></IconButton></span></Tooltip>
+          <TextField size="small" type="date" value={date} onChange={(event) => {
+            const selectedDate = event.target.value;
+            if (selectedDate && selectedDate <= maxAttendanceDate) setDate(selectedDate);
+          }}
+            inputProps={{ 'aria-label': 'Attendance date', max: maxAttendanceDate }}
+            disabled={savingAll} sx={{ width: 165 }} />
+          <Tooltip title={date >= maxAttendanceDate ? 'Future attendance is unavailable' : 'Next day'}>
+            <span><IconButton size="small" aria-label="Next day" disabled={savingAll || date >= maxAttendanceDate}
+              onClick={() => setDate((value) => {
+                const nextDate = moveDate(value, 1);
+                return nextDate <= maxAttendanceDate ? nextDate : value;
+              })}><ChevronRight /></IconButton></span>
+          </Tooltip>
           <Button size="small" startIcon={<TodayOutlined />} disabled={savingAll} onClick={() => setDate(today())}>Today</Button>
         </Stack>
       </Stack>
@@ -223,9 +231,14 @@ export default function Attendance({ notify }) {
             <TextField size="small" placeholder="Search labourers" value={search} onChange={(event) => setSearch(event.target.value)}
               InputProps={{ startAdornment: <InputAdornment position="start"><SearchOutlined fontSize="small" /></InputAdornment> }}
               sx={{ width: { sm: 250 } }} />
-            <ToggleButtonGroup size="small" exclusive value={filter} onChange={(_event, value) => value && setFilter(value)} aria-label="Filter attendance">
-              {['All', 'Not saved', ...statuses].map((item) => <ToggleButton value={item} key={item}>{item}</ToggleButton>)}
-            </ToggleButtonGroup>
+            <Tabs value={filter} onChange={(_event, value) => setFilter(value)} aria-label="Filter attendance"
+              variant="scrollable" scrollButtons="auto"
+              sx={{
+                minHeight: 38,
+                '& .MuiTab-root': { minHeight: 38, minWidth: 'auto', px: 1.5, textTransform: 'none', fontSize: 13 }
+              }}>
+              {['All', 'Present', 'Absent', 'Not saved'].map((item) => <Tab value={item} label={item} key={item} />)}
+            </Tabs>
           </Stack>
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
             {selectedIds.length > 0 && <>
@@ -261,10 +274,9 @@ export default function Attendance({ notify }) {
               <TableBody>
                 {visibleRows.map((row) => <TableRow key={row.employee_id} hover selected={selectedIds.includes(row.employee_id)}
                   sx={{
-                    bgcolor: row.status === 'Present' ? 'rgba(22,138,99,.045)' : 'rgba(211,47,47,.04)',
+                    bgcolor: 'background.paper',
                     '&.Mui-selected': { bgcolor: 'rgba(36,87,197,.09)' },
                     '&.Mui-selected:hover': { bgcolor: 'rgba(36,87,197,.13)' },
-                    '& td:first-of-type': { borderLeft: '3px solid', borderLeftColor: row.status === 'Present' ? 'success.main' : 'error.main' }
                   }}>
                   <TableCell padding="checkbox">
                     <Checkbox size="small" checked={selectedIds.includes(row.employee_id)} disabled={savingAll}
@@ -276,9 +288,25 @@ export default function Attendance({ notify }) {
                   </TableCell>
                   <TableCell>
                     <ToggleButtonGroup size="small" exclusive value={row.status} disabled={savingAll}
-                      onChange={(_event, value) => value && changeStatus(row.employee_id, value)} aria-label={`${row.full_name} attendance`}>
-                      <ToggleButton value="Present" sx={{ px: 1.25, '&.Mui-selected': { color: 'success.dark', bgcolor: 'success.light' } }}>Present</ToggleButton>
-                      <ToggleButton value="Absent" sx={{ px: 1.25, '&.Mui-selected': { color: 'error.dark', bgcolor: 'error.light' } }}>Absent</ToggleButton>
+                      onChange={(_event, value) => value && changeStatus(row.employee_id, value)}
+                      aria-label={`${row.full_name} attendance`}
+                      sx={{
+                        '& .MuiToggleButton-root': {
+                          px: 1.25, py: 0.65, textTransform: 'none', fontSize: 12, fontWeight: 600,
+                          borderColor: 'divider', color: 'text.secondary', bgcolor: 'background.paper',
+                          '&:hover': { bgcolor: 'action.hover' }
+                        },
+                        '& .MuiToggleButton-root:first-of-type.Mui-selected': {
+                          color: '#fff', bgcolor: 'success.main', borderColor: 'success.main',
+                          '&:hover': { bgcolor: 'success.dark', borderColor: 'success.dark' }
+                        },
+                        '& .MuiToggleButton-root:last-of-type.Mui-selected': {
+                          color: '#fff', bgcolor: '#b54747', borderColor: '#b54747',
+                          '&:hover': { bgcolor: '#963d3d', borderColor: '#963d3d' }
+                        }
+                      }}>
+                      <ToggleButton value="Present">Present</ToggleButton>
+                      <ToggleButton value="Absent">Absent</ToggleButton>
                     </ToggleButtonGroup>
                   </TableCell>
                   <TableCell align="center">

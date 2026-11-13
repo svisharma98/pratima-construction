@@ -12,7 +12,7 @@ import { paiseFromRupees, rupees, today } from '../lib/format.js';
 const empty = () => ({
   full_name: '', mobile: '', email: '', address: '', joining_date: today(), profile_photo_data: '',
   designation: '', department: '', employment_type: 'Full-time', status: 'Active',
-  emergency_contact: '', bank_details: '', daily_rate: ''
+  emergency_contact: '', government_id: '', daily_rate: ''
 });
 
 export default function Employees({ notify }) {
@@ -34,7 +34,7 @@ export default function Employees({ notify }) {
       email: employee.email || '',
       address: employee.address || '',
       emergency_contact: employee.emergency_contact || '',
-      bank_details: employee.bank_details || '',
+      government_id: employee.government_id || '',
       profile_photo_data: employee.profile_photo_data || '',
       daily_rate: employee.daily_rate_paise == null ? '' : (employee.daily_rate_paise / 100).toFixed(2),
       department: employee.department || ''
@@ -128,7 +128,8 @@ export default function Employees({ notify }) {
           Hourly pay is calculated as the daily rate ÷ 8. Hours above 8 are paid at the same hourly rate.
         </Typography>
         <TextField label="Emergency contact" value={form.emergency_contact || ''} onChange={setField('emergency_contact')} />
-        <TextField label="Bank account details" value={form.bank_details || ''} onChange={setField('bank_details')} />
+        <TextField label="Government ID" value={form.government_id || ''} onChange={setField('government_id')}
+          inputProps={{ autoComplete: 'off' }} />
         <TextField label="Address" multiline minRows={2} value={form.address || ''} onChange={setField('address')} sx={{ gridColumn: { sm: '1 / -1' } }} />
       </Box></DialogContent>
       <DialogActions sx={{ px: 3, py: 2 }}><Button onClick={() => setDialog(false)}>Cancel</Button>
@@ -150,7 +151,8 @@ export default function Employees({ notify }) {
             ['Joining date', profile.joining_date], ['Employment type', profile.employment_type],
             ['Status', profile.status],
             ['Daily rate (8 hours)', rupees(profile.daily_rate_paise)],
-            ['Emergency contact', profile.emergency_contact || '—'], ['Bank details', profile.bank_details || '—'],
+            ['Government ID', profile.government_id || '—'],
+            ['Emergency contact', profile.emergency_contact || '—'],
             ['Address', profile.address || '—']
             ].map(([label, value]) => <Box key={label}>
               <Typography variant="caption" color="text.secondary">{label}</Typography>

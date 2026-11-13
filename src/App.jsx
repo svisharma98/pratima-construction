@@ -6,7 +6,7 @@ import {
 import {
   AccountBalanceWalletOutlined, AssessmentOutlined, CalendarMonthOutlined, DashboardOutlined,
   Groups2Outlined, Menu as MenuIcon, PaymentsOutlined, SettingsOutlined, Brightness4Outlined,
-  Brightness7Outlined, ReceiptLongOutlined, ConstructionOutlined
+  Brightness7Outlined, ReceiptLongOutlined, ConstructionOutlined, LogoutOutlined
 } from '@mui/icons-material';
 
 const drawerWidth = 250;
@@ -22,8 +22,8 @@ const navigation = [
   { key: 'dashboard', title: 'Dashboard', icon: DashboardOutlined },
   { key: 'employees', title: 'Employees', icon: Groups2Outlined },
   { key: 'attendance', title: 'Attendance', icon: CalendarMonthOutlined },
-  { key: 'salaries', title: 'Labour Billing', icon: PaymentsOutlined },
   { key: 'advances', title: 'Weekly Payments', icon: AccountBalanceWalletOutlined },
+  { key: 'salaries', title: 'Labour Billing', icon: PaymentsOutlined },
   { key: 'slips', title: 'Salary Slips', icon: ReceiptLongOutlined },
   { key: 'reports', title: 'Reports', icon: AssessmentOutlined },
   { key: 'settings', title: 'Settings', icon: SettingsOutlined }
@@ -36,6 +36,14 @@ export default function App({ mode, setMode }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const notify = React.useCallback((message, severity = 'success') => setToast({ open: true, message, severity }), []);
+  const exitApp = async () => {
+    if (!window.confirm('Exit Pratima Construction Payroll? Your saved data will be kept.')) return;
+    try {
+      await window.payroll.exitApp();
+    } catch (error) {
+      notify(error.message, 'error');
+    }
+  };
 
   const pages = {
     dashboard: <Dashboard notify={notify} />,
@@ -50,7 +58,8 @@ export default function App({ mode, setMode }) {
 
   const sidebar = <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: 'background.paper' }}>
     <Box sx={{ px: 2.5, py: 2.4, display: 'flex', gap: 1.4, alignItems: 'center' }}>
-      <Avatar variant="rounded" sx={{ bgcolor: 'primary.main', width: 42, height: 42 }}><ConstructionOutlined /></Avatar>
+    <Avatar variant="rounded" src="./pratima.png" imgProps={{ sx: { objectFit: 'contain' } }}
+      sx={{ bgcolor: '#fff', width: 42, height: 42 }}><ConstructionOutlined /></Avatar>
       <Box><Typography fontWeight={750} fontSize={15}>Pratima Construction</Typography><Typography variant="caption" color="text.secondary">Labour Billing</Typography></Box>
     </Box>
     <Divider sx={{ mx: 2 }} />
@@ -68,6 +77,12 @@ export default function App({ mode, setMode }) {
       <Typography variant="caption" color="text.secondary">Offline workspace</Typography>
       <Typography variant="body2" fontWeight={600} sx={{ mt: 0.3 }}>Your data stays on this device.</Typography>
     </Box>
+    <List sx={{ px: 1.4, pt: 0, pb: 1.5 }}>
+      <ListItemButton onClick={exitApp} sx={{ minHeight: 44, borderRadius: 2, color: 'text.secondary' }}>
+        <ListItemIcon sx={{ minWidth: 38, color: 'inherit' }}><LogoutOutlined fontSize="small" /></ListItemIcon>
+        <ListItemText primary="Exit app" primaryTypographyProps={{ fontSize: 13.5, fontWeight: 550 }} />
+      </ListItemButton>
+    </List>
   </Box>;
 
   return <Box sx={{ display: 'flex', minHeight: '100vh' }}>
@@ -86,7 +101,8 @@ export default function App({ mode, setMode }) {
             {mode === 'light' ? <Brightness4Outlined /> : <Brightness7Outlined />}
           </IconButton>
         </Tooltip>
-        <Avatar sx={{ width: 34, height: 34, ml: 1.5, bgcolor: 'secondary.main', fontSize: 13 }}>PC</Avatar>
+        <Avatar variant="rounded" src="./pratima.png" imgProps={{ sx: { objectFit: 'contain' } }}
+          sx={{ width: 34, height: 34, ml: 1.5, bgcolor: '#fff' }} alt="Pratima Construction logo" />
       </Toolbar>
     </AppBar>
     <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>

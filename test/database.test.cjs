@@ -107,11 +107,25 @@ test('SQLite IPC workflows create employees, attendance, advances and immutable 
       department: 'Projects',
       employment_type: 'Full-time',
       status: 'Active',
+      government_id: 'ID-TEST-12345',
       daily_rate_paise: 80_000
     });
     assert.equal(employeeCode, 'EMP-0002');
     const employee = (await invoke('employees:list', { search: '', status: 'All' }))[0];
     assert.equal(employee.daily_rate_needs_review, 0);
+    assert.equal(employee.government_id, 'ID-TEST-12345');
+    await invoke('employees:save', {
+      id: employee.id,
+      full_name: employee.full_name,
+      mobile: employee.mobile,
+      joining_date: employee.joining_date,
+      designation: employee.designation,
+      employment_type: employee.employment_type,
+      status: employee.status,
+      government_id: 'ID-UPDATED-67890',
+      daily_rate_paise: 80_000
+    });
+    assert.equal((await invoke('employees:list', { search: '', status: 'All' }))[0].government_id, 'ID-UPDATED-67890');
 
     assert.throws(() => invoke('salaries:process', {
       employee_id: employee.id,
@@ -169,6 +183,12 @@ test('SQLite IPC workflows create employees, attendance, advances and immutable 
       amount_paise: 50_000,
       method: 'UPI'
     });
+    assert.throws(() => invoke('advances:create', {
+      employee_id: employee.id,
+      payment_date: '2026-01-02',
+      amount_paise: 25_000,
+      method: 'Cash'
+    }), /already recorded for this labourer on this date/);
     const salary = await invoke('salaries:process', {
       employee_id: employee.id,
       period_start: '2026-01-01',

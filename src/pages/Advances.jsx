@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Box, Button, Card, CardContent, Dialog, DialogActions, DialogContent, DialogTitle, Grid,
+  Alert, Box, Button, Card, CardContent, Dialog, DialogActions, DialogContent, DialogTitle, Grid,
   MenuItem, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography
 } from '@mui/material';
 import { AddOutlined, AccountBalanceWalletOutlined, EditOutlined } from '@mui/icons-material';
@@ -36,7 +36,13 @@ export default function Advances({ notify }) {
   const setAdjustmentField = (field) => (event) => setAdjustment((value) => ({ ...value, [field]: event.target.value }));
   const outstanding = advances.reduce((sum, item) => sum + item.outstanding_paise, 0);
   const total = advances.reduce((sum, item) => sum + item.amount_paise, 0);
+  const duplicatePayment = advances.some((item) => item.employee_id === Number(form.employee_id)
+    && item.payment_date === form.payment_date);
   const submit = async () => {
+    if (duplicatePayment) {
+      notify('A weekly payment is already recorded for this labourer on this date', 'error');
+      return;
+    }
     setSaving(true);
     try {
       await window.payroll.advances.create({
@@ -112,6 +118,7 @@ export default function Advances({ notify }) {
           {employees.filter((item) => item.status === 'Active').map((item) => <MenuItem key={item.id} value={item.id}>{item.full_name} · {item.employee_code}</MenuItem>)}
         </TextField>
         <Typography variant="body2" color="text.secondary">Enter each amount you have already given this labourer. It will be subtracted from their next labour bill.</Typography>
+        {duplicatePayment && <Alert severity="warning">A payment for this labourer is already recorded on this date. Choose a different date.</Alert>}
         <Grid container spacing={2}><Grid item xs={6}><TextField fullWidth required label="Date paid" type="date" InputLabelProps={{ shrink: true }} value={form.payment_date} onChange={setField('payment_date')} /></Grid>
           <Grid item xs={6}><TextField fullWidth required label="Amount paid (₹)" type="number" inputProps={{ min: 0.01, step: '0.01' }} value={form.amount} onChange={setField('amount')} /></Grid></Grid>
         <TextField select label="Payment method" value={form.method} onChange={setField('method')}>
@@ -121,7 +128,7 @@ export default function Advances({ notify }) {
         <TextField label="Remarks" multiline minRows={2} value={form.remarks} onChange={setField('remarks')} />
       </Stack></DialogContent>
       <DialogActions sx={{ px: 3, py: 2 }}><Button onClick={() => setOpen(false)}>Cancel</Button>
-        <Button variant="contained" disabled={saving || !form.employee_id || !form.amount || Number(form.amount) <= 0} onClick={submit}>{saving ? 'Saving…' : 'Save weekly payment'}</Button></DialogActions>
+        <Button variant="contained" disabled={saving || duplicatePayment || !form.employee_id || !form.amount || Number(form.amount) <= 0} onClick={submit}>{saving ? 'Saving…' : 'Save weekly payment'}</Button></DialogActions>
     </Dialog>
     <Dialog open={Boolean(adjustmentAdvance)} onClose={() => setAdjustmentAdvance(null)} maxWidth="sm" fullWidth>
       <DialogTitle>Correct weekly payment</DialogTitle>

@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 const invoke = (channel) => (payload) => ipcRenderer.invoke(channel, payload);
 
 contextBridge.exposeInMainWorld('payroll', Object.freeze({
+  exitApp: invoke('app:quit'),
   dashboard: invoke('dashboard:get'),
   employees: Object.freeze({
     list: invoke('employees:list'),

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, nativeImage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
@@ -36,6 +36,7 @@ const schema = `
     status TEXT NOT NULL DEFAULT 'Active' CHECK(status IN ('Active','Inactive')),
     emergency_contact TEXT,
     bank_details TEXT,
+    government_id TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
@@ -186,18 +187,28 @@ function openDatabase(databasePath) {
       INTEGER NOT NULL DEFAULT 1 CHECK(daily_rate_review_required IN (0,1))`);
   }
   instance.prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(3)').run();
+  const updatedEmployeeColumns = new Set(instance.pragma('table_info(employees)').map((column) => column.name));
+  if (!updatedEmployeeColumns.has('government_id')) {
+    instance.exec('ALTER TABLE employees ADD COLUMN government_id TEXT');
+  }
+  instance.prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(4)').run();
   instance.prepare(`INSERT INTO company_settings(key,value) VALUES('company_name','Pratima Construction')
     ON CONFLICT(key) DO NOTHING`).run();
   return instance;
 }
 
 function createWindow() {
+  const iconPath = path.join(__dirname, '..', app.isPackaged ? 'dist/pratima.png' : 'build/pratima.png');
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.setIcon(nativeImage.createFromPath(iconPath));
+  }
   const win = new BrowserWindow({
     width: 1440,
     height: 920,
     minWidth: 1024,
     minHeight: 680,
     backgroundColor: '#f5f7fb',
+    icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -229,6 +240,11 @@ function createWindow() {
 }
 
 function registerHandlers() {
+  ipcMain.handle('app:quit', () => {
+    app.quit();
+    return true;
+  });
+
   ipcMain.handle('dashboard:get', () => {
     const now = new Date();
     const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
@@ -294,6 +310,7 @@ function registerHandlers() {
       status: z.enum(['Active', 'Inactive']),
       emergency_contact: z.string().max(100).optional().default(''),
       bank_details: z.string().max(300).optional().default(''),
+      government_id: z.string().trim().max(100).optional().default(''),
       profile_photo_data: z.string().max(8_000_000).optional().default(''),
       daily_rate_paise: positiveInt
     }).parse(input);
@@ -307,16 +324,16 @@ function registerHandlers() {
       if (id) {
         db.prepare(`UPDATE employees SET full_name=?,mobile=?,email=?,address=?,joining_date=?,
           designation=?,department_id=?,employment_type=?,status=?,emergency_contact=?,bank_details=?,
-          profile_photo_data=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(data.full_name, data.mobile, data.email,
+          government_id=?,profile_photo_data=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(data.full_name, data.mobile, data.email,
           data.address, data.joining_date, data.designation, departmentId, data.employment_type,
-          data.status, data.emergency_contact, data.bank_details, data.profile_photo_data, id);
+          data.status, data.emergency_contact, data.bank_details, data.government_id, data.profile_photo_data, id);
       } else {
         const code = `EMP-${String((db.prepare('SELECT COALESCE(MAX(id),0)+1 AS n FROM employees').get().n)).padStart(4, '0')}`;
         const result = db.prepare(`INSERT INTO employees(employee_code,full_name,mobile,email,address,
-          joining_date,designation,department_id,employment_type,status,emergency_contact,bank_details,profile_photo_data)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(code, data.full_name, data.mobile, data.email,
+          joining_date,designation,department_id,employment_type,status,emergency_contact,bank_details,government_id,profile_photo_data)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(code, data.full_name, data.mobile, data.email,
           data.address, data.joining_date, data.designation, departmentId, data.employment_type,
-          data.status, data.emergency_contact, data.bank_details, data.profile_photo_data);
+          data.status, data.emergency_contact, data.bank_details, data.government_id, data.profile_photo_data);
         id = result.lastInsertRowid;
       }
       db.prepare(`INSERT INTO salary_structures(employee_id,basic_salary_paise,payment_frequency,
@@ -415,6 +432,12 @@ function registerHandlers() {
       remarks: z.string().max(300).optional().default('')
     }).parse(input);
     const transact = db.transaction(() => {
+      const existingPayment = db.prepare(`SELECT 1 FROM advance_payments
+        WHERE employee_id=? AND payment_date=? LIMIT 1`)
+        .get(data.employee_id, data.payment_date);
+      if (existingPayment) {
+        throw new Error('A weekly payment is already recorded for this labourer on this date');
+      }
       const result = db.prepare(`INSERT INTO advance_payments(transaction_id,employee_id,payment_date,
         amount_paise,outstanding_paise,method,reference_number,remarks) VALUES(?,?,?,?,?,?,?,?)`)
         .run(createTransactionId('ADV'),

@@ -8,6 +8,26 @@ import { prettyDate, rupees } from '../lib/format.js';
 
 const pdfMoney = (paise) => `INR ${(Math.abs(Number(paise) || 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+function loadDefaultLogo() {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext('2d');
+      if (!context) {
+        reject(new Error('Could not prepare the company logo for salary slips'));
+        return;
+      }
+      context.drawImage(image, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    image.onerror = () => reject(new Error('Could not load the default company logo for salary slips'));
+    image.src = new URL('./pratima.png', window.location.href).href;
+  });
+}
+
 function makeSlip(record, company) {
   const doc = new jsPDF();
   const left = 18;
@@ -128,7 +148,15 @@ export default function SalarySlips() {
   const [error, setError] = React.useState('');
   React.useEffect(() => {
     Promise.all([window.payroll.salaries.list(), window.payroll.settings.get()])
-      .then(([salaries, settings]) => { setRecords(salaries); setCompany(settings); })
+      .then(([salaries, settings]) => {
+        setRecords(salaries);
+        setCompany(settings);
+        if (!settings.company_logo_data) {
+          loadDefaultLogo()
+            .then((logo) => setCompany((current) => current.company_logo_data ? current : { ...current, company_logo_data: logo }))
+            .catch((reason) => setError(reason.message));
+        }
+      })
       .catch((reason) => setError(reason.message));
   }, []);
   const filtered = records.filter((row) => `${row.full_name} ${row.employee_code} ${row.period_start}`.toLowerCase().includes(search.toLowerCase()));
