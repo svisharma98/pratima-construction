@@ -1,0 +1,5 @@
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 760px; }
+.page-table-wrap { width: 100%; overflow-x: auto; }
+.metric-card { height: 100%; }
+.muted-label { color: #788397; font-size: .78rem; }

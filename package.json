@@ -1,0 +1,55 @@
+{
+  "name": "pratima-construction-payroll",
+  "version": "1.0.0",
+  "description": "Offline-first employee management and payroll for Pratima Construction",
+  "main": "electron/main.cjs",
+  "author": "Pratima Construction",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "node scripts/run-app.js --desktop",
+    "build": "vite build",
+    "test": "cross-env ELECTRON_RUN_AS_NODE=1 electron --test",
+    "start": "electron .",
+    "postinstall": "electron-builder install-app-deps",
+    "dist:win": "npm run build && electron-builder --win"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@mui/icons-material": "^6.4.12",
+    "@mui/material": "^6.4.12",
+    "better-sqlite3": "^11.9.1",
+    "jspdf": "^4.2.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.15.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.1",
+    "electron-builder": "^26.0.12",
+    "vite": "^6.2.5",
+    "wait-on": "^8.0.3"
+  },
+  "build": {
+    "appId": "com.pratimaconstruction.payroll",
+    "productName": "Pratima Construction Payroll",
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "directories": {
+      "output": "release"
+    }
+  }
+}
