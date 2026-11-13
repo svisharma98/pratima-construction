@@ -720,6 +720,7 @@ function registerHandlers() {
       company_name: z.string().trim().min(2).max(120),
       company_address: z.string().max(500).optional().default(''),
       contact: z.string().max(100).optional().default(''),
+      gstin: z.string().trim().max(15).optional().default(''),
       currency: z.literal('INR').default('INR'),
       date_format: z.enum(['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD']).default('DD/MM/YYYY'),
       financial_year_start: z.string().regex(/^\d{2}-\d{2}$/).default('04-01'),

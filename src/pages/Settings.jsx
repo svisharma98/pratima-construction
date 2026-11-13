@@ -9,6 +9,7 @@ const defaults = {
   company_name: 'Pratima Construction',
   company_address: '',
   contact: '',
+  gstin: '',
   currency: 'INR',
   date_format: 'DD/MM/YYYY',
   financial_year_start: '04-01',
@@ -83,6 +84,7 @@ export default function Settings({ notify }) {
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}><TextField fullWidth required label="Company name" value={form.company_name} onChange={setField('company_name')} /></Grid>
               <Grid item xs={12} sm={6}><TextField fullWidth label="Contact information" value={form.contact} onChange={setField('contact')} /></Grid>
+              <Grid item xs={12} sm={6}><TextField fullWidth label="GSTIN" inputProps={{ maxLength: 15 }} value={form.gstin} onChange={setField('gstin')} helperText="Leave blank until your GST number is ready." /></Grid>
               <Grid item xs={12}><TextField fullWidth multiline minRows={2} label="Company address" value={form.company_address} onChange={setField('company_address')} /></Grid>
             </Grid>
             <Divider sx={{ my: 2.5 }} />

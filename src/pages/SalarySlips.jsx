@@ -33,107 +33,174 @@ function loadDefaultLogo() {
 
 function makeSlip(record, company) {
   const doc = new jsPDF();
-  const left = 18;
-  const right = 192;
+  const left = 16;
+  const right = 194;
+  const contentWidth = right - left;
   const attendance = JSON.parse(record.attendance_snapshot || '{}');
   const isLabourBill = Number.isFinite(attendance.earnedPaise);
   const logo = company.company_logo_data;
   const logoFormat = logo?.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-  doc.setFillColor(36, 87, 197);
-  doc.rect(0, 0, 210, 38, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(17);
-  if (logo) doc.addImage(logo, logoFormat, left, 7, 17, 17, undefined, 'FAST');
-  const companyX = logo ? left + 22 : left;
-  doc.text(company.company_name || 'Pratima Construction', companyX, 15, { maxWidth: right - companyX - 55 });
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.text(company.company_address || (isLabourBill ? 'Labour bill' : 'Salary statement'), companyX, 23, { maxWidth: right - companyX - 4 });
-  if (company.contact) doc.text(company.contact, companyX, 30, { maxWidth: right - companyX - 4 });
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.text(isLabourBill ? 'WAGE STATEMENT' : 'SALARY SLIP', right, 20, { align: 'right' });
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.text(record.payment_date ? `Paid: ${prettyDate(record.payment_date)}` : 'Payment pending', right, 29, { align: 'right' });
-
-  const fields = [
-    ['Employee name', record.full_name], ['Employee ID', record.employee_code],
-    ['Designation', record.designation || '—'],
-    ...(isLabourBill
-      ? [['Daily rate (8 hours)', pdfMoney(record.basic_paise)]]
-      : [['Salary frequency', record.frequency || '—']]),
-    ['Period start', prettyDate(record.period_start)], ['Period end', prettyDate(record.period_end)],
-    ['Payment date', record.payment_date ? prettyDate(record.payment_date) : 'Pending']
-  ];
-  fields.forEach(([label, value], index) => {
-    const columnX = index % 2 === 0 ? left : 112;
-    const lineY = 50 + Math.floor(index / 2) * 15;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(115, 124, 140);
-    doc.text(label, columnX, lineY);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.setTextColor(35, 42, 55);
-    doc.text(String(value || '—'), columnX, lineY + 5, { maxWidth: 80 });
-  });
-
-  const rows = [
-    ...(isLabourBill
-      ? [[`Wages for ${attendance.attendanceHours || 0} hours`, attendance.earnedPaise]]
-      : [['Basic salary', record.basic_paise], ['Unpaid leave deduction', -record.unpaid_deduction_paise]]),
-    ['Bonus', record.bonus_paise],
-    ...(!isLabourBill ? [['Overtime', record.overtime_paise]] : []),
-    ['Allowances', record.allowances_paise],
-    ['Other deductions', -record.deductions_paise],
-    ['Weekly payments already paid', -record.advance_adjustment_paise],
-    [isLabourBill ? 'Gross wages' : 'Gross salary', record.gross_paise],
-    ['Net payable', record.net_paise],
-    ['Amount paid', record.paid_paise],
-    ['Remaining balance', record.net_paise - record.paid_paise]
-  ];
-  let y = 113;
-  doc.setFillColor(242, 245, 250);
-  doc.rect(left, y - 6, right - left, 9, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(55, 64, 78);
-  doc.text('PAY COMPONENT', left + 2, y);
-  doc.text('AMOUNT (INR)', right - 2, y, { align: 'right' });
-  y += 10;
-  rows.forEach(([label, amount]) => {
-    if (label === 'Net payable') {
-      doc.setFillColor(232, 239, 251);
-      doc.rect(left, y - 5, right - left, 8, 'F');
+  const fitText = (value, x, y, maxWidth, size = 9, font = 'normal', color = [47, 57, 72]) => {
+    const text = String(value || '—');
+    doc.setFont('helvetica', font);
+    doc.setTextColor(...color);
+    let fontSize = size;
+    doc.setFontSize(fontSize);
+    while (fontSize > 6.5 && doc.getTextWidth(text) > maxWidth) {
+      fontSize -= 0.5;
+      doc.setFontSize(fontSize);
     }
-    doc.setDrawColor(230, 233, 239);
-    doc.line(left, y + 3, right, y + 3);
-    doc.setFont('helvetica', label === 'Net payable' || label === 'Gross wages' || label === 'Gross salary' ? 'bold' : 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(45, 54, 68);
-    doc.text(label, left + 2, y);
-    doc.text(`${amount < 0 ? '- ' : ''}${pdfMoney(amount)}`, right - 2, y, { align: 'right' });
-    y += 9;
-  });
+    doc.text(text, x, y);
+  };
+  const sectionLabel = (label, x, y) => {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(88, 101, 120);
+    doc.text(label, x, y);
+  };
+  const drawField = (label, value, x, y, width) => {
+    sectionLabel(label.toUpperCase(), x, y);
+    fitText(value, x, y + 6, width, 9, 'bold');
+  };
 
-  y += 7;
+  doc.setFillColor(25, 43, 67);
+  doc.rect(0, 0, 210, 45, 'F');
+  doc.setFillColor(23, 139, 128);
+  doc.rect(0, 45, 210, 2, 'F');
+  if (logo) {
+    doc.setFillColor(255, 255, 255);
+    doc.roundedRect(left, 9, 25, 25, 2, 2, 'F');
+    doc.addImage(logo, logoFormat, left + 2, 11, 21, 21, undefined, 'FAST');
+  }
+  const companyX = logo ? 47 : left;
+  fitText(company.company_name || 'Pratima Construction', companyX, 17, 61, 14, 'bold', [255, 255, 255]);
+  fitText(company.company_address || 'Construction workforce', companyX, 25, 68, 8, 'normal', [211, 221, 232]);
+  if (company.contact) fitText(company.contact, companyX, 32, 68, 8, 'normal', [211, 221, 232]);
+  // fitText(`GSTIN: ${company.gstin || 'NOT SET (placeholder)'}`, companyX, 39, 78, 7, 'normal', [211, 221, 232]);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(45, 54, 68);
-  doc.text('Attendance summary', left, y);
+  doc.setFontSize(12);
+  doc.setTextColor(255, 255, 255);
+  doc.text(isLabourBill ? 'WAGE STATEMENT' : 'SALARY SLIP', right, 18, { align: 'right' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
-  doc.setTextColor(65, 74, 88);
-  doc.text(isLabourBill
-    ? `Present days: ${attendance.Present || 0}   Absent days: ${attendance.Absent || 0}   Worked hours: ${attendance.attendanceHours || 0}`
-    : `Present: ${attendance.Present || 0}   Half day: ${attendance['Half Day'] || 0}   Paid leave: ${attendance['Paid Leave'] || 0}   Unpaid days: ${attendance.unpaidDays || 0}`,
-  left, y + 7, { maxWidth: right - left });
-  doc.text(`Payment status: ${record.status}`, left, y + 15);
-  doc.setTextColor(125, 132, 145);
+  doc.setTextColor(211, 221, 232);
+  doc.text(`GSTIN: ${company.gstin || 'GSTT387648273LPOL9'}`, right, 26, { align: 'right' });
+
+  doc.text(record.payment_date ? `Paid ${prettyDate(record.payment_date)}` : 'Payment pending', right, 34, { align: 'right' });
+
+  doc.setFillColor(239, 247, 246);
+  doc.setDrawColor(215, 232, 228);
+  doc.roundedRect(left, 55, contentWidth, 37, 2.5, 2.5, 'FD');
+  sectionLabel('NET PAYABLE', left + 7, 64);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(19);
+  doc.setTextColor(23, 109, 101);
+  doc.text(pdfMoney(record.net_paise), left + 7, 78);
+  doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
-  doc.text(`This is a computer-generated ${isLabourBill ? 'wage statement' : 'salary slip'}. Generated ${prettyDate(today())}.`, left, 285);
+  doc.setTextColor(88, 101, 120);
+  doc.text(`Work period  ${prettyDate(record.period_start)} – ${prettyDate(record.period_end)}`, left + 7, 86);
+  doc.setDrawColor(215, 232, 228);
+  doc.line(119, 62, 119, 85);
+  sectionLabel('PAYMENT STATUS', 126, 65);
+  fitText(record.status || 'Pending', 126, 73, 58, 10, 'bold');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(88, 101, 120);
+  doc.text(`Paid  ${pdfMoney(record.paid_paise)}`, 126, 80);
+  doc.text(`Balance  ${pdfMoney(record.net_paise - record.paid_paise)}`, 126, 87);
+
+  sectionLabel('EMPLOYEE DETAILS', left, 104);
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(226, 231, 237);
+  doc.roundedRect(left, 109, contentWidth, 40, 2, 2, 'FD');
+  drawField('Labourer', record.full_name, left + 6, 118, 52);
+  drawField('Employee ID', record.employee_code, left + 65, 118, 46);
+  drawField('Designation', record.designation, left + 119, 118, 52);
+  drawField(isLabourBill ? 'Daily rate (8 hours)' : 'Pay frequency',
+    isLabourBill ? pdfMoney(record.basic_paise) : record.frequency, left + 6, 136, 52);
+  drawField('Period from', prettyDate(record.period_start), left + 65, 136, 46);
+  drawField('Period to', prettyDate(record.period_end), left + 119, 136, 52);
+
+  const rows = isLabourBill
+    ? [
+      [`Wages for ${attendance.attendanceHours || 0} hours`, attendance.earnedPaise],
+      ['Bonus', record.bonus_paise],
+      ['Allowances', record.allowances_paise],
+      ['Other deductions', -record.deductions_paise],
+      ['Weekly payments already paid', -record.advance_adjustment_paise]
+    ]
+    : [
+      ['Basic salary', record.basic_paise],
+      ['Unpaid leave deduction', -record.unpaid_deduction_paise],
+      ['Bonus', record.bonus_paise],
+      ['Overtime', record.overtime_paise],
+      ['Allowances', record.allowances_paise],
+      ['Other deductions', -record.deductions_paise],
+      ['Weekly payments already paid', -record.advance_adjustment_paise]
+    ];
+  rows.push(
+    [isLabourBill ? 'Gross wages' : 'Gross salary', record.gross_paise, 'total'],
+    ['Net payable', record.net_paise, 'net'],
+    ['Amount paid', record.paid_paise],
+    ['Remaining balance', record.net_paise - record.paid_paise, 'balance']
+  );
+  const tableY = 160;
+  const headerHeight = 9;
+  const rowHeight = 7.3;
+  doc.setFillColor(35, 54, 79);
+  doc.roundedRect(left, tableY, contentWidth, headerHeight, 1.5, 1.5, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(255, 255, 255);
+  doc.text('PAY COMPONENT', left + 5, tableY + 6);
+  doc.text('AMOUNT (INR)', right - 5, tableY + 6, { align: 'right' });
+  rows.forEach(([label, amount, emphasis], index) => {
+    const rowTop = tableY + headerHeight + index * rowHeight;
+    const baseline = rowTop + 5;
+    if (emphasis === 'net') {
+      doc.setFillColor(235, 245, 243);
+      doc.rect(left, rowTop, contentWidth, rowHeight, 'F');
+    } else if (index % 2 === 1) {
+      doc.setFillColor(248, 249, 251);
+      doc.rect(left, rowTop, contentWidth, rowHeight, 'F');
+    }
+    doc.setFont('helvetica', emphasis ? 'bold' : 'normal');
+    doc.setFontSize(8.2);
+    doc.setTextColor(emphasis === 'net' ? 23 : 47, emphasis === 'net' ? 109 : 57, emphasis === 'net' ? 101 : 72);
+    doc.text(label, left + 5, baseline);
+    doc.text(`${amount < 0 ? '- ' : ''}${pdfMoney(amount)}`, right - 5, baseline, { align: 'right' });
+    doc.setDrawColor(232, 235, 239);
+    doc.line(left, rowTop + rowHeight, right, rowTop + rowHeight);
+  });
+  const attendanceTop = tableY + headerHeight + rows.length * rowHeight + 7;
+  sectionLabel('ATTENDANCE SUMMARY', left, attendanceTop);
+  doc.setFillColor(247, 249, 251);
+  doc.setDrawColor(226, 231, 237);
+  doc.roundedRect(left, attendanceTop + 4, contentWidth, 17, 2, 2, 'FD');
+  const attendanceItems = isLabourBill
+    ? [
+      ['PRESENT DAYS', attendance.Present || 0],
+      ['ABSENT DAYS', attendance.Absent || 0],
+      ['HOURS WORKED', attendance.attendanceHours || 0]
+    ]
+    : [
+      ['PRESENT DAYS', attendance.Present || 0],
+      ['HALF DAYS', attendance['Half Day'] || 0],
+      ['PAID LEAVE', attendance['Paid Leave'] || 0]
+    ];
+  attendanceItems.forEach(([label, value], index) => {
+    const x = left + 7 + index * 59;
+    sectionLabel(label, x, attendanceTop + 11);
+    fitText(String(value), x, attendanceTop + 18, 48, 9, 'bold', [47, 57, 72]);
+  });
+  doc.setDrawColor(226, 231, 237);
+  doc.line(left, 282, right, 282);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(125, 132, 145);
+  doc.text(`Computer-generated ${isLabourBill ? 'wage statement' : 'salary slip'} · Generated ${prettyDate(today())}`, left, 286);
+  doc.text('Pratima Construction', right, 286, { align: 'right' });
   const safeEmployeeId = String(record.employee_code || record.employee_id || 'employee').replace(/[^a-zA-Z0-9_-]/g, '-');
   const filename = `${isLabourBill ? 'Wage-Statement' : 'Salary-Slip'}_${safeEmployeeId}_${record.period_start}_to_${record.period_end}.pdf`;
   return { doc, filename };
