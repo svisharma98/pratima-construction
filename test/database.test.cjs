@@ -234,7 +234,23 @@ test('SQLite IPC workflows create employees, attendance, advances and immutable 
     });
     assert.equal(salary.gross_paise, 250_000);
     assert.equal(JSON.parse(salary.attendance_snapshot).attendanceHours, 25);
+    assert.equal(JSON.parse(salary.attendance_snapshot).overtimeDays, 1);
+    assert.equal(JSON.parse(salary.attendance_snapshot).overtimeHours, 4);
+    assert.equal(JSON.parse(salary.attendance_snapshot).attendanceDays.length, 4);
+    assert.deepEqual(JSON.parse(salary.attendance_snapshot).attendanceDays.find((day) => day.date === '2026-01-04'), {
+      date: '2026-01-04',
+      status: 'Present',
+      workingHours: 12
+    });
     assert.equal(JSON.parse(salary.attendance_snapshot).earnedPaise, 250_000);
+    const snapshotDb = new Database(path.join(userData, 'pratima-construction.sqlite'));
+    snapshotDb.prepare('UPDATE salary_records SET attendance_snapshot=? WHERE id=?')
+      .run(JSON.stringify({ Present: 3, attendanceHours: 25, earnedPaise: 250_000 }), salary.id);
+    snapshotDb.close();
+    const legacySalary = (await invoke('salaries:list')).find((record) => record.id === salary.id);
+    assert.equal(legacySalary.current_overtime_hours, 4);
+    assert.equal(legacySalary.attendance_days.length, 4);
+    assert.equal(legacySalary.attendance_days.find((day) => day.attendance_date === '2026-01-04').working_hours, 12);
     assert.equal(salary.advance_adjustment_paise, 60_000);
     assert.equal(salary.net_paise, 190_000);
     assert.equal(salary.paid_paise, 0);

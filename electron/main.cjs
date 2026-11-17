@@ -529,12 +529,43 @@ function registerHandlers() {
     ORDER BY adjustment_date DESC
   `).all());
 
-  ipcMain.handle('salaries:list', () => db.prepare(`SELECT s.*,e.employee_code,e.full_name,
+  ipcMain.handle('salaries:list', () => {
+    const records = db.prepare(`SELECT s.*,e.employee_code,e.full_name,
     e.designation,ss.basic_salary_paise AS current_daily_rate_paise,
-    (SELECT MAX(payment_date) FROM salary_payments p WHERE p.salary_record_id=s.id) AS payment_date
+    (SELECT MAX(payment_date) FROM salary_payments p WHERE p.salary_record_id=s.id) AS payment_date,
+    (SELECT COALESCE(SUM(MAX(0,
+      CASE
+        WHEN a.status='Present' AND a.working_hours<=0 THEN 8
+        WHEN a.status='Half Day' AND a.working_hours<=0 THEN 4
+        WHEN a.status IN ('Absent','Unpaid Leave','Paid Leave','Weekly Off') THEN 0
+        ELSE a.working_hours
+      END - 8)),0)
+      FROM attendance a
+      WHERE a.employee_id=s.employee_id
+        AND a.attendance_date BETWEEN s.period_start AND s.period_end) AS current_overtime_hours
     FROM salary_records s JOIN employees e ON e.id=s.employee_id
     JOIN salary_structures ss ON ss.employee_id=e.id
-    ORDER BY s.period_start DESC,s.id DESC`).all());
+    ORDER BY s.period_start DESC,s.id DESC`).all();
+    const attendanceForPeriod = db.prepare(`SELECT attendance_date,
+      CASE WHEN status IN ('Present','Half Day') THEN 'Present' ELSE 'Absent' END AS status,
+      CASE
+        WHEN status='Present' AND working_hours<=0 THEN 8
+        WHEN status='Half Day' AND working_hours<=0 THEN 4
+        WHEN status IN ('Absent','Unpaid Leave','Paid Leave','Weekly Off') THEN 0
+        ELSE working_hours
+      END AS working_hours
+      FROM attendance WHERE employee_id=? AND attendance_date BETWEEN ? AND ?
+      ORDER BY attendance_date`);
+    return records.map((record) => {
+      const snapshot = JSON.parse(record.attendance_snapshot || '{}');
+      return {
+        ...record,
+        attendance_days: Array.isArray(snapshot.attendanceDays)
+          ? snapshot.attendanceDays
+          : attendanceForPeriod.all(record.employee_id, record.period_start, record.period_end)
+      };
+    });
+  });
   ipcMain.handle('salaries:payments', (_event, input) => {
     const { salary_record_id } = z.object({ salary_record_id: positiveInt }).parse(input);
     return db.prepare(`SELECT * FROM salary_payments WHERE salary_record_id=?
@@ -578,6 +609,8 @@ function registerHandlers() {
         attendanceRows.reduce((counts, row) => counts.set(row.status, (counts.get(row.status) || 0) + 1), new Map())
       );
       const attendanceHours = attendanceRows.reduce((sum, row) => sum + row.working_hours, 0);
+      const overtimeDays = attendanceRows.filter((row) => Number(row.working_hours) > 8).length;
+      const overtimeHours = attendanceRows.reduce((sum, row) => sum + Math.max(0, row.working_hours - 8), 0);
       const eligibleAdvances = db.prepare(`SELECT id,outstanding_paise FROM advance_payments
         WHERE employee_id=? AND outstanding_paise>0 AND payment_date<=?
         ORDER BY payment_date,id`).all(data.employee_id, data.period_end);
@@ -597,7 +630,18 @@ function registerHandlers() {
         data.period_end, 'Monthly', employee.basic_salary_paise, data.bonus_paise,
         0, data.allowances_paise, data.deductions_paise, 0,
         calculation.advanceAdjustmentPaise, calculation.grossPaise, calculation.netPaise,
-        JSON.stringify({ ...attendanceCounts, attendanceHours, earnedPaise: calculation.earnedPaise }));
+        JSON.stringify({
+          ...attendanceCounts,
+          attendanceHours,
+          overtimeDays,
+          overtimeHours,
+          attendanceDays: attendanceRows.map(({ attendance_date, status, working_hours }) => ({
+            date: attendance_date,
+            status,
+            workingHours: working_hours
+          })),
+          earnedPaise: calculation.earnedPaise
+        }));
       for (const allocation of calculation.advanceAllocations) {
         db.prepare(`INSERT INTO salary_adjustments(transaction_id,salary_record_id,advance_payment_id,amount_paise)
           VALUES(?,?,?,?)`).run(createTransactionId('ADJ'),
@@ -645,6 +689,8 @@ function registerHandlers() {
         attendanceRows.reduce((counts, row) => counts.set(row.status, (counts.get(row.status) || 0) + 1), new Map())
       );
       const attendanceHours = attendanceRows.reduce((sum, row) => sum + row.working_hours, 0);
+      const overtimeDays = attendanceRows.filter((row) => Number(row.working_hours) > 8).length;
+      const overtimeHours = attendanceRows.reduce((sum, row) => sum + Math.max(0, row.working_hours - 8), 0);
       if (attendanceHours <= 0) throw new Error('No working hours were found for this bill period');
 
       const previousAllocations = db.prepare(`SELECT advance_payment_id,amount_paise
@@ -670,7 +716,18 @@ function registerHandlers() {
         net_paise=?,attendance_snapshot=? WHERE id=?`)
         .run(employee.basic_salary_paise, calculation.advanceAdjustmentPaise,
           calculation.grossPaise, calculation.netPaise,
-          JSON.stringify({ ...attendanceCounts, attendanceHours, earnedPaise: calculation.earnedPaise }),
+          JSON.stringify({
+            ...attendanceCounts,
+            attendanceHours,
+            overtimeDays,
+            overtimeHours,
+            attendanceDays: attendanceRows.map(({ attendance_date, status, working_hours }) => ({
+              date: attendance_date,
+              status,
+              workingHours: working_hours
+            })),
+            earnedPaise: calculation.earnedPaise
+          }),
           salary.id);
       for (const allocation of calculation.advanceAllocations) {
         db.prepare(`INSERT INTO salary_adjustments(transaction_id,salary_record_id,advance_payment_id,amount_paise)

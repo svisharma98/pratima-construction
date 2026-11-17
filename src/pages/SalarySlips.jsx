@@ -10,6 +10,7 @@ import StatusChip from '../components/StatusChip.jsx';
 import { prettyDate, rupees, today } from '../lib/format.js';
 
 const pdfMoney = (paise) => `INR ${(Math.abs(Number(paise) || 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const calendarDate = (year, month, day) => `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
 function loadDefaultLogo() {
   return new Promise((resolve, reject) => {
@@ -64,40 +65,40 @@ function makeSlip(record, company) {
   };
 
   doc.setFillColor(25, 43, 67);
-  doc.rect(0, 0, 210, 45, 'F');
+  doc.rect(0, 0, 210, 40, 'F');
   doc.setFillColor(23, 139, 128);
-  doc.rect(0, 45, 210, 2, 'F');
+  doc.rect(0, 40, 210, 2, 'F');
   if (logo) {
     doc.setFillColor(255, 255, 255);
-    doc.roundedRect(left, 9, 25, 25, 2, 2, 'F');
-    doc.addImage(logo, logoFormat, left + 2, 11, 21, 21, undefined, 'FAST');
+    doc.roundedRect(left, 8, 23, 23, 2, 2, 'F');
+    doc.addImage(logo, logoFormat, left + 2, 10, 19, 19, undefined, 'FAST');
   }
   const companyX = logo ? 47 : left;
-  fitText(company.company_name || 'Pratima Construction', companyX, 17, 61, 14, 'bold', [255, 255, 255]);
-  fitText(company.company_address || 'Construction workforce', companyX, 25, 68, 8, 'normal', [211, 221, 232]);
-  if (company.contact) fitText(company.contact, companyX, 32, 68, 8, 'normal', [211, 221, 232]);
+  fitText(company.company_name || 'Pratima Construction', companyX, 15, 61, 14, 'bold', [255, 255, 255]);
+  fitText(company.company_address || 'Construction workforce', companyX, 23, 68, 8, 'normal', [211, 221, 232]);
+  if (company.contact) fitText(company.contact, companyX, 30, 68, 8, 'normal', [211, 221, 232]);
   // fitText(`GSTIN: ${company.gstin || 'NOT SET (placeholder)'}`, companyX, 39, 78, 7, 'normal', [211, 221, 232]);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
   doc.setTextColor(255, 255, 255);
-  doc.text(isLabourBill ? 'WAGE STATEMENT' : 'SALARY SLIP', right, 18, { align: 'right' });
+  doc.text(isLabourBill ? 'WAGE STATEMENT' : 'SALARY SLIP', right, 16, { align: 'right' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(211, 221, 232);
-  doc.text(`GSTIN: ${company.gstin || 'GSTT387648273LPOL9'}`, right, 26, { align: 'right' });
+  doc.text(`GSTIN: ${company.gstin || 'GSTT387648273LPOL9'}`, right, 23, { align: 'right' });
 
-  doc.text(record.payment_date ? `Paid ${prettyDate(record.payment_date)}` : 'Payment pending', right, 34, { align: 'right' });
+  doc.text(record.payment_date ? `Paid ${prettyDate(record.payment_date)}` : 'Payment pending', right, 31, { align: 'right' });
 
-  sectionLabel('EMPLOYEE DETAILS', left, 57);
+  sectionLabel('EMPLOYEE DETAILS', left, 52);
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(226, 231, 237);
-  doc.roundedRect(left, 62, contentWidth, 40, 2, 2, 'FD');
-  drawField('Labourer', record.full_name, left + 6, 71, 52);
-  drawField('Employee ID', record.employee_code, left + 65, 71, 46);
-  drawField('Designation', record.designation, left + 119, 71, 52);
-  drawField('Pay frequency', record.frequency, left + 6, 89, 52);
-  drawField('Period from', prettyDate(record.period_start), left + 65, 89, 46);
-  drawField('Period to', prettyDate(record.period_end), left + 119, 89, 52);
+  doc.roundedRect(left, 57, contentWidth, 34, 2, 2, 'FD');
+  drawField('Labourer', record.full_name, left + 6, 64, 52);
+  drawField('Employee ID', record.employee_code, left + 65, 64, 46);
+  drawField('Designation', record.designation, left + 119, 64, 52);
+  drawField('Pay frequency', record.frequency, left + 6, 78, 52);
+  drawField('Period from', prettyDate(record.period_start), left + 65, 78, 46);
+  drawField('Period to', prettyDate(record.period_end), left + 119, 78, 52);
 
   const rows = isLabourBill
     ? [
@@ -122,7 +123,7 @@ function makeSlip(record, company) {
     ['Amount paid', record.paid_paise],
     ['Remaining balance', record.net_paise - record.paid_paise, 'balance']
   );
-  const tableY = 113;
+  const tableY = 98;
   const headerHeight = 9;
   const rowHeight = 7.3;
   doc.setFillColor(35, 54, 79);
@@ -155,10 +156,12 @@ function makeSlip(record, company) {
   doc.setFillColor(247, 249, 251);
   doc.setDrawColor(226, 231, 237);
   doc.roundedRect(left, attendanceTop + 4, contentWidth, 17, 2, 2, 'FD');
+  const overtimeHours = Number(attendance.overtimeHours ?? record.current_overtime_hours ?? 0);
   const attendanceItems = isLabourBill
     ? [
       ['PRESENT DAYS', attendance.Present || 0],
       ['ABSENT DAYS', attendance.Absent || 0],
+      ['OVERTIME HOURS', overtimeHours],
       ['HOURS WORKED', attendance.attendanceHours || 0]
     ]
     : [
@@ -167,9 +170,10 @@ function makeSlip(record, company) {
       ['PAID LEAVE', attendance['Paid Leave'] || 0]
     ];
   attendanceItems.forEach(([label, value], index) => {
-    const x = left + 7 + index * 59;
+    const columnWidth = contentWidth / attendanceItems.length;
+    const x = left + 7 + index * columnWidth;
     sectionLabel(label, x, attendanceTop + 11);
-    fitText(String(value), x, attendanceTop + 18, 48, 9, 'bold', [47, 57, 72]);
+    fitText(String(value), x, attendanceTop + 18, columnWidth - 10, 9, 'bold', [47, 57, 72]);
   });
   if (isLabourBill) {
     doc.setFont('helvetica', 'normal');
@@ -177,13 +181,169 @@ function makeSlip(record, company) {
     doc.setTextColor(110, 119, 132);
     doc.text(`Rate note: ${pdfMoney(Number(record.basic_paise) / 8)} per hour · ${pdfMoney(record.basic_paise)} per day (8 hours)`,
       left + 1, attendanceTop + 31);
+
+    const attendanceByDate = new Map((record.attendance_days || attendance.attendanceDays || [])
+      .map((item) => [item.date || item.attendance_date, item]));
+    const [startYear, startMonth] = record.period_start.split('-').map(Number);
+    const [endYear, endMonth] = record.period_end.split('-').map(Number);
+    let year = startYear;
+    let month = startMonth - 1;
+    let firstCalendarPage = true;
+    while (year < endYear || (year === endYear && month <= endMonth - 1)) {
+      const offset = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const weekRows = Math.ceil((offset + daysInMonth) / 7);
+      const cellWidth = contentWidth / 7;
+      const compact = firstCalendarPage;
+      let cellHeight;
+      let gridTop;
+      if (compact) {
+        firstCalendarPage = false;
+        const calendarTop = attendanceTop + 36;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.setTextColor(47, 57, 72);
+        doc.text('ATTENDANCE CALENDAR', left, calendarTop);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6.5);
+        doc.text(new Date(year, month, 1).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }), left + 42, calendarTop);
+        const legendY = calendarTop - 2;
+        doc.setFontSize(5.5);
+        doc.setFillColor(220, 241, 233);
+        doc.rect(right - 47, legendY - 2, 3, 3, 'F');
+        doc.text('Present', right - 43, legendY + 0.5);
+        doc.setFillColor(250, 229, 229);
+        doc.rect(right - 29, legendY - 2, 3, 3, 'F');
+        doc.text('Absent', right - 25, legendY + 0.5);
+        doc.setFillColor(194, 231, 211);
+        doc.setDrawColor(18, 83, 59);
+        doc.rect(right - 12, legendY - 2, 3, 3, 'F');
+        doc.text('OT', right - 8, legendY + 0.5);
+        gridTop = calendarTop + 6;
+        cellHeight = (280 - gridTop) / weekRows;
+      } else {
+        doc.addPage();
+        doc.setFillColor(25, 43, 67);
+        doc.rect(0, 0, 210, 31, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.setTextColor(255, 255, 255);
+        doc.text('ATTENDANCE CALENDAR', left, 14);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.text(new Date(year, month, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }), left, 23);
+        doc.setFontSize(8);
+        doc.text('Present', right - 69, 14);
+        doc.setFillColor(220, 241, 233);
+        doc.rect(right - 79, 10, 7, 6, 'F');
+        doc.text('Absent', right - 43, 14);
+        doc.setFillColor(250, 229, 229);
+        doc.rect(right - 53, 10, 7, 6, 'F');
+        doc.text('Overtime', right - 2, 14, { align: 'right' });
+        doc.setFillColor(194, 231, 211);
+        doc.setDrawColor(18, 83, 59);
+        doc.rect(right - 31, 10, 7, 6, 'FD');
+        gridTop = 42;
+        cellHeight = 24;
+      }
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(compact ? 6.5 : 8);
+      doc.setTextColor(88, 101, 120);
+      ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach((weekday, index) => {
+        doc.text(weekday, left + index * cellWidth + cellWidth / 2, gridTop - (compact ? 2 : 5), { align: 'center' });
+      });
+
+      for (let day = 1; day <= daysInMonth; day += 1) {
+        const date = calendarDate(year, month, day);
+        const column = (offset + day - 1) % 7;
+        const row = Math.floor((offset + day - 1) / 7);
+        const x = left + column * cellWidth;
+        const y = gridTop + row * cellHeight;
+        const inPeriod = date >= record.period_start && date <= record.period_end;
+        const item = inPeriod ? attendanceByDate.get(date) : null;
+        const workingHours = Number(item?.workingHours ?? item?.working_hours ?? 0);
+        const overtime = item?.status === 'Present' && workingHours > 8;
+        if (inPeriod) {
+          doc.setFillColor(...(overtime ? [194, 231, 211] : item?.status === 'Present' ? [232, 245, 239] : item?.status === 'Absent' ? [252, 238, 238] : [248, 249, 251]));
+        } else {
+          doc.setFillColor(255, 255, 255);
+        }
+        doc.setDrawColor(...(overtime ? [18, 83, 59] : [226, 231, 237]));
+        const cellInset = compact ? 1.2 : 2;
+        doc.roundedRect(x + cellInset, y + cellInset, cellWidth - cellInset * 2,
+          cellHeight - cellInset * 2, compact ? 1.2 : 1, compact ? 1.2 : 1, 'FD');
+        if (!inPeriod) continue;
+
+        const contentY = y + cellHeight / 2 + (compact ? 1.5 : 2);
+        const dateCenterX = x + 6;
+        const dividerX = x + 11.5;
+        const textColor = overtime ? [18, 83, 59] : [47, 57, 72];
+        const dateColor = overtime ? [18, 83, 59] : [23, 139, 128];
+
+        doc.setDrawColor(...dateColor);
+        doc.setLineWidth(0.35);
+        const dateBadgeHeight = compact ? Math.min(5.5, cellHeight - 3.4) : 6.2;
+        const dateBadgeWidth = 7.2;
+        const dateBadgeTop = y + (cellHeight - dateBadgeHeight) / 2;
+        doc.roundedRect(dateCenterX - dateBadgeWidth / 2, dateBadgeTop, dateBadgeWidth, dateBadgeHeight, 1.1, 1.1, 'S');
+        doc.setFont('helvetica', 'bold');
+        const dateFontSize = compact ? 7.5 : 8;
+        doc.setFontSize(dateFontSize);
+        doc.setTextColor(...dateColor);
+        const dateTextY = dateBadgeTop + dateBadgeHeight / 2 + dateFontSize * 0.3528 * 0.35;
+        doc.text(String(day).padStart(2, '0'), dateCenterX, dateTextY, { align: 'center' });
+
+        doc.setDrawColor(...(overtime ? [125, 185, 153] : [190, 199, 210]));
+        doc.setLineWidth(0.25);
+        doc.line(dividerX, y + (compact ? 2 : 5), dividerX, y + cellHeight - (compact ? 2 : 5));
+
+        doc.setFont('helvetica', overtime ? 'bold' : 'normal');
+        doc.setFontSize(compact ? 7 : 6.5);
+        doc.setTextColor(...textColor);
+        const hoursLabel = item
+          ? `${workingHours} ${workingHours > 1 ? 'Hours' : 'Hour'}`
+          : '—';
+        const hoursX = dividerX + 2;
+        const hoursWidth = x + cellWidth - dividerX - 4.5;
+        const hoursFontSize = compact ? 8.5 : 8;
+        doc.setFont('helvetica', overtime ? 'bold' : 'normal');
+        doc.setFontSize(hoursFontSize);
+        while (doc.getTextWidth(hoursLabel) > hoursWidth && doc.getFontSize() > 5.5) {
+          doc.setFontSize(doc.getFontSize() - 0.5);
+        }
+        const hoursTextY = y + cellHeight / 2 + doc.getFontSize() * 0.3528 * 0.35;
+        doc.setTextColor(...textColor);
+        doc.text(hoursLabel, hoursX, hoursTextY);
+      }
+
+      if (!compact) {
+        doc.setDrawColor(226, 231, 237);
+        doc.line(left, 282, right, 282);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(125, 132, 145);
+        fitText(`${record.full_name} · ${prettyDate(record.period_start)} – ${prettyDate(record.period_end)}`,
+          left, 286, 132, 7.5, 'normal', [125, 132, 145]);
+        doc.text('Pratima Construction', right, 286, { align: 'right' });
+      }
+
+      if (month === 11) {
+        month = 0;
+        year += 1;
+      } else {
+        month += 1;
+      }
+    }
   }
+  doc.setPage(1);
   doc.setDrawColor(226, 231, 237);
   doc.line(left, 282, right, 282);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(125, 132, 145);
-  doc.text(`Computer-generated ${isLabourBill ? 'wage statement' : 'salary slip'} · Generated ${prettyDate(today())}`, left, 286);
+  fitText(`Computer-generated ${isLabourBill ? 'wage statement' : 'salary slip'} · Generated ${prettyDate(today())}`,
+    left, 286, 132, 7.5, 'normal', [125, 132, 145]);
   doc.text('Pratima Construction', right, 286, { align: 'right' });
   const safeEmployeeId = String(record.employee_code || record.employee_id || 'employee').replace(/[^a-zA-Z0-9_-]/g, '-');
   const filename = `${isLabourBill ? 'Wage-Statement' : 'Salary-Slip'}_${safeEmployeeId}_${record.period_start}_to_${record.period_end}.pdf`;
