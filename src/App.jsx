@@ -60,7 +60,7 @@ export default function App({ mode, setMode }) {
     <Box sx={{ px: 2.5, py: 2.4, display: 'flex', gap: 1.4, alignItems: 'center' }}>
     <Avatar variant="rounded" src="./pratima.png" imgProps={{ sx: { objectFit: 'contain' } }}
       sx={{ bgcolor: '#fff', width: 42, height: 42 }}><ConstructionOutlined /></Avatar>
-      <Box><Typography fontWeight={750} fontSize={15}>Pratima Construction</Typography><Typography variant="caption" color="text.secondary">Labour Billing</Typography></Box>
+      <Box><Typography fontWeight={750} fontSize={15}>Pratima Kumari</Typography><Typography variant="caption" color="text.secondary">Labour Billing</Typography></Box>
     </Box>
     <Divider sx={{ mx: 2 }} />
     <Typography variant="overline" color="text.secondary" sx={{ pl: 2.5, pt: 2.5, pb: 1, fontWeight: 700, letterSpacing: 1 }}>WORKSPACE</Typography>

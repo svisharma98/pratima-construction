@@ -810,7 +810,7 @@ function registerHandlers() {
   });
   ipcMain.handle('database:backup', async () => {
     const { canceled, filePath } = await dialog.showSaveDialog({
-      title: 'Back up Pratima Construction data',
+      title: 'Back up Pratima Kumari data',
       defaultPath: `pratima-payroll-backup-${new Date().toISOString().slice(0, 10)}.sqlite`,
       filters: [{ name: 'SQLite database', extensions: ['sqlite', 'db'] }]
     });

@@ -50,7 +50,7 @@ export default function Attendance({ notify }) {
           employee_id: employee.id, full_name: employee.full_name, employee_code: employee.employee_code,
           daily_rate_paise: employee.daily_rate_paise,
           status: found?.status || 'Present',
-          working_hours: found?.working_hours ?? (found?.status === 'Absent' ? 0 : 8),
+          working_hours: found?.working_hours ?? (found?.status === 'Absent' ? 0 : 12),
           saved: Boolean(found)
         };
       }));

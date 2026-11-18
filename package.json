@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Offline-first employee management and payroll for Pratima Construction",
   "main": "electron/main.cjs",
-  "author": "Pratima Construction",
+  "author": "Core Soft Team",
   "license": "UNLICENSED",
   "scripts": {
     "dev": "node scripts/run-app.js --desktop",
@@ -36,7 +36,7 @@
   },
   "build": {
     "appId": "com.pratimaconstruction.payroll",
-    "productName": "Pratima Construction Payroll",
+    "productName": "Pratima Kumari Payroll",
     "files": [
       "dist/**/*",
       "electron/**/*",
